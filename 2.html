@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tableau分析工具</title>
+  <meta name="description" content="一款强大的Tableau工作簿分析工具，可自动提取和可视化计算字段之间的依赖关系，支持多种格式导出，帮助您更好地理解和维护复杂的Tableau工作簿。完全本地运行，确保数据安全。">
+  <meta name="keywords" content="Tableau, 数据分析, 字段关系, 可视化, 计算字段, 依赖分析, 文档生成, 工作簿分析, 函数分析, 项目迁移">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --primary: #FFED29;
+      /* 明亮黄色 - 更加鲜艳醒目 */
+      --primary-light: #FFF176;
+      /* 浅色调 */
+      --primary-dark: #FBC02D;
+      /* 深色调 - 用于悬停效果 */
+      --primary-transparent: rgba(255, 237, 41, 0.08);
+      /* 透明黄色背景 */
+      --bg: #f9fafb;
+      --card: #ffffff;
+      --text: #111827;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --success: #10b981;
+      --radius: 12px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--primary);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 20px;
+      color: #24231b;
+      /* 深色文字在黄色背景上更易读 */
+      box-shadow: 0 2px 10px rgba(255, 237, 41, 0.4);
+      /* 添加发光效果 */
+    }
+
+    .logo-text {
+      font-weight: 700;
+      font-size: 1.5rem;
+      color: var(--text);
+    }
+
+    .nav {
+      display: flex;
+      gap: 1.5rem;
+    }
+
+    .nav-item {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      padding: 0.5rem 0;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .nav-item.active {
+      color: var(--primary-dark);
+      border-bottom-color: var(--primary);
+    }
+
+    .nav-item:hover:not(.active) {
+      color: var(--text);
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 2rem;
+      margin-bottom: 2rem;
+      border-top: 3px solid var(--primary);
+      /* 添加顶部边框突显主题色 */
+      transition: transform 0.3s ease;
+    }
+
+    .card:hover {
+      /* transform: translateY(-3px);
+      box-shadow: var(--shadow-lg); */
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      color: #43402f;
+      /* 稍微深一点的文字颜色 */
+    }
+
+    .card-icon {
+      width: 24px;
+      height: 24px;
+      color: var(--primary-dark);
+    }
+
+    .upload-area {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .upload-area:hover {
+      border-color: var(--primary);
+      background: var(--primary-transparent);
+      box-shadow: 0 0 15px rgba(255, 237, 41, 0.2);
+      /* 添加发光效果 */
+    }
+
+    .upload-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 1rem;
+      color: var(--primary-dark);
+    }
+
+    .upload-text {
+      font-size: 1.125rem;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+
+    .upload-hint {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .btn {
+      background: var(--primary);
+      color: #24231b;
+      /* 深色文字在黄色背景上更易读 */
+      border: none;
+      border-radius: 6px;
+      padding: 0.75rem 1.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--primary);
+      color: var(--primary-dark);
+    }
+
+    .btn-outline:hover {
+      background: var(--primary-transparent);
+    }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .option-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .option-item:hover {
+      background: var(--primary-transparent);
+    }
+
+    .option-checkbox {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary-dark);
+    }
+
+    .option-label {
+      font-size: 0.9375rem;
+    }
+
+    /* 移除标签页样式 */
+    .mermaid-container {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 2rem;
+      height: 500px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      overflow: auto;
+    }
+    
+    #mermaidDiv {
+      width: 100%;
+      height: 100%;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th,
+    td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      max-width: 250px;
+      white-space: normal;
+    }
+
+    th:nth-child(4), td:nth-child(4) {
+      max-width: 300px;
+    }
+
+    th {
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    tr:hover td {
+      background: var(--primary-transparent);
+    }
+    
+    .table-container {
+      scrollbar-width: thin;
+      scrollbar-color: var(--primary-dark) var(--bg);
+    }
+    
+    .table-container::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .table-container::-webkit-scrollbar-track {
+      background: var(--bg);
+    }
+    
+    .table-container::-webkit-scrollbar-thumb {
+      background-color: var(--primary-dark);
+      border-radius: 4px;
+    }
+
+    .mermaid-container {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 2rem;
+      height: 500px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+    }
+
+    .file-list {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .file-item {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      transition: all 0.2s;
+      border-left: 3px solid var(--primary);
+    }
+
+    .file-item:hover {
+      box-shadow: var(--shadow);
+      transform: translateY(-2px);
+      background: white;
+    }
+
+    .file-icon {
+      width: 40px;
+      height: 40px;
+      margin-bottom: 0.5rem;
+      color: var(--primary-dark);
+    }
+
+    .file-name {
+      font-weight: 500;
+      font-size: 0.9375rem;
+    }
+
+    .file-info {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+
+    .log-container {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      height: 300px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+    }
+
+    .log-entry {
+      margin-bottom: 0.5rem;
+      display: flex;
+    }
+
+    .log-time {
+      color: var(--text-muted);
+      margin-right: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .log-message.success {
+      color: var(--success);
+    }
+
+    /* 添加一些微妙的动画效果 */
+    .card,
+    .btn,
+    .file-item {
+      transition: all 0.3s ease;
+    }
+
+    /* 响应式设计调整 */
+    @media (max-width: 768px) {
+      .container {
+        padding: 1rem;
+      }
+
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+
+      .nav {
+        width: 100%;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+      }
+
+      .card {
+        padding: 1.5rem;
+      }
+
+      .options-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">T</div>
+        <div class="logo-text">Tableau分析工具</div>
+      </div>
+    </header>
+
+    <div class="card">
+      <h2 class="card-title">
+        <svg class="card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        上传Tableau工作簿
+      </h2>
+      <div class="upload-area" id="dropArea">
+        <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <h3 class="upload-text">拖放Tableau工作簿文件到此处</h3>
+        <p class="upload-hint">支持.twbx和.twb文件格式</p>
+        <input type="file" id="fileInput" accept=".twbx,.twb" style="display: none;">
+        <button class="btn" id="selectFileBtn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          选择文件
+        </button>
+        <div id="loading" class="hidden" style="margin-top: 1rem;">
+          <div style="width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; margin: 0 auto; animation: spin 1s linear infinite;"></div>
+          <p style="margin-top: 0.5rem;">处理中...</p>
+        </div>
+      </div>
+
+      <div class="options-grid">
+        <div class="option-item">
+          <input type="checkbox" class="option-checkbox" id="opt1" checked>
+          <label class="option-label" for="opt1">提取所有字段</label>
+        </div>
+        <div class="option-item">
+          <input type="checkbox" class="option-checkbox" id="opt2" checked>
+          <label class="option-label" for="opt2">生成Excel报告</label>
+        </div>
+        <div class="option-item">
+          <input type="checkbox" class="option-checkbox" id="opt3" checked>
+          <label class="option-label" for="opt3">生成PDF报告</label>
+        </div>
+        <div class="option-item">
+          <input type="checkbox" class="option-checkbox" id="opt4" checked>
+          <label class="option-label" for="opt4">创建依赖关系图</label>
+        </div>
+      </div>
+
+      <div class="export-buttons" style="display: flex; gap: 1rem; margin-top: 1rem;">
+        <button class="btn" id="analyzeBtn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+            <polyline points="16 7 22 7 22 13"></polyline>
+          </svg>
+          开始分析
+        </button>
+        <button class="btn btn-outline" id="exportSVGBtn" disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          导出SVG
+        </button>
+        <button class="btn btn-outline" id="exportPNGBtn" disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          导出PNG
+        </button>
+      </div>
+      <div class="export-buttons" style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+        <button class="btn btn-outline" id="exportExcelBtn" disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          导出Excel
+        </button>
+        <button class="btn btn-outline" id="exportPDFBtn" disabled>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          导出PDF
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">
+        <svg class="card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+        </svg>
+        分析结果
+      </h2>
+
+      <div class="card">
+        <h2 class="card-title">
+          <svg class="card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          字段列表
+        </h2>
+        <div class="table-container" style="height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;">
+          <table id="fieldsTable">
+            <thead>
+              <tr>
+                <th>字段名称</th>
+                <th>数据类型</th>
+                <th>字段类型</th>
+                <th>计算公式</th>
+                <th>字段ID</th>
+                <th>数据源</th>
+              </tr>
+            </thead>
+            <tbody id="fieldsTableBody">
+              <!-- 字段数据将在这里动态生成 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">
+          <svg class="card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          依赖关系图
+        </h2>
+        <div class="mermaid-container" id="mermaidContainer">
+          <!-- 这里将显示Mermaid图表 -->
+          <div id="mermaidDiv"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">
+          <svg class="card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          导出文件
+        </h2>
+        <ul class="file-list" id="exportFilesList">
+          <!-- 导出文件列表将在这里动态生成 -->
+        </ul>
+
+        <div style="margin-top: 1.5rem;">
+          <button class="btn" id="exportCSVBtn" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            导出所有字段为CSV
+          </button>
+          <button class="btn" id="exportJSONBtn" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            导出依赖关系为JSON
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">
+          <svg class="card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"></path>
+            <path d="M22 10v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8"></path>
+            <path d="M22 10l-10.4 7.8a2 2 0 0 1-2.4 0L2 10"></path>
+          </svg>
+          处理日志
+        </h2>
+        <div class="log-container" id="logContainer">
+          <!-- 处理日志将在这里动态生成 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 存储处理后的数据
+    let processedData = null;
+    let currentFile = null;
+    let exportedFiles = [];
+
+    // 初始化页面元素
+    document.addEventListener('DOMContentLoaded', function() {
+      // 初始化mermaid
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: 'default',
+        securityLevel: 'loose',
+        flowchart: {
+          useMaxWidth: false,
+          htmlLabels: true
+        }
+      });
+
+      // 初始化文件上传
+      const fileInput = document.getElementById('fileInput');
+      const selectFileBtn = document.getElementById('selectFileBtn');
+      const dropArea = document.getElementById('dropArea');
+      const analyzeBtn = document.getElementById('analyzeBtn');
+      
+      // 点击选择文件按钮时触发文件输入
+      selectFileBtn.addEventListener('click', () => {
+        fileInput.click();
+      });
+      
+      // 文件选择后处理
+      fileInput.addEventListener('change', handleFileSelect);
+      
+      // 拖放文件处理
+      dropArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropArea.classList.add('upload-area-active');
+      });
+      
+      dropArea.addEventListener('dragleave', () => {
+        dropArea.classList.remove('upload-area-active');
+      });
+      
+      dropArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropArea.classList.remove('upload-area-active');
+        
+        if (e.dataTransfer.files.length) {
+          const file = e.dataTransfer.files[0];
+          if (isValidFile(file)) {
+            currentFile = file;
+            updateFileInfo(file);
+          } else {
+            addLogEntry('错误', `不支持的文件类型: ${file.name}。请上传.twb或.twbx文件。`);
+          }
+        }
+      });
+      
+      // 分析按钮点击事件
+      analyzeBtn.addEventListener('click', () => {
+        if (currentFile) {
+          processTableauFile(currentFile);
+        } else {
+          addLogEntry('错误', '请先选择一个Tableau工作簿文件');
+        }
+      });
+      
+      // 导出按钮事件
+      document.getElementById('exportSVGBtn').addEventListener('click', downloadSVG);
+      document.getElementById('exportPNGBtn').addEventListener('click', downloadPNG);
+      document.getElementById('exportExcelBtn').addEventListener('click', exportExcel);
+      document.getElementById('exportPDFBtn').addEventListener('click', exportPDF);
+      document.getElementById('exportCSVBtn').addEventListener('click', exportCSV);
+      document.getElementById('exportJSONBtn').addEventListener('click', exportJSON);
+    });
+
+    // Mermaid初始化
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'default',
+      securityLevel: 'loose',
+      maxTextSize: 100000,
+      flowchart: {
+        htmlLabels: true,
+        curve: 'basis'
+      }
+    });
+
+    // 检查文件类型是否有效
+    function isValidFile(file) {
+      const fileName = file.name.toLowerCase();
+      return fileName.endsWith('.twb') || fileName.endsWith('.twbx');
+    }
+
+    // 处理文件选择
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (file && isValidFile(file)) {
+        currentFile = file;
+        updateFileInfo(file);
+      } else if (file) {
+        addLogEntry('错误', `不支持的文件类型: ${file.name}。请上传.twb或.twbx文件。`);
+      }
+    }
+
+    // 更新文件信息显示
+    function updateFileInfo(file) {
+      const uploadText = document.querySelector('.upload-text');
+      uploadText.textContent = `已选择: ${file.name}`;
+      addLogEntry('信息', `已选择文件: ${file.name}`);
+    }
+
+    // 添加日志条目
+    function addLogEntry(type, message) {
+      const logContainer = document.getElementById('logContainer');
+      const now = new Date();
+      const timeStr = `[${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}]`;
+      
+      const logEntry = document.createElement('div');
+      logEntry.className = 'log-entry';
+      
+      const logTime = document.createElement('div');
+      logTime.className = 'log-time';
+      logTime.textContent = timeStr;
+      
+      const logMessage = document.createElement('div');
+      logMessage.className = 'log-message';
+      if (type === '成功') logMessage.classList.add('success');
+      if (type === '错误') logMessage.style.color = '#e53e3e';
+      logMessage.textContent = message;
+      
+      logEntry.appendChild(logTime);
+      logEntry.appendChild(logMessage);
+      logContainer.appendChild(logEntry);
+      
+      // 自动滚动到底部
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    // 处理Tableau文件
+    async function processTableauFile(file) {
+      const loading = document.getElementById('loading');
+      loading.classList.remove('hidden');
+      
+      // 清空之前的结果
+      document.getElementById('fieldsTableBody').innerHTML = '';
+      document.getElementById('mermaidDiv').innerHTML = '';
+      document.getElementById('exportFilesList').innerHTML = '';
+      
+      // 禁用导出按钮
+      setExportButtonsState(true);
+      
+      addLogEntry('信息', `开始处理文件: ${file.name}`);
+      
+      try {
+        // 确保mermaid已初始化
+        if (typeof mermaid !== 'undefined') {
+          mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose',
+            flowchart: {
+              useMaxWidth: false,
+              htmlLabels: true
+            }
+          });
+        } else {
+          addLogEntry('错误', 'Mermaid库未加载，无法渲染图表');
+        }
+        
+        // 处理不同类型的文件
+        if (file.name.toLowerCase().endsWith('.twbx')) {
+          await processTWBX(file);
+        } else if (file.name.toLowerCase().endsWith('.twb')) {
+          await processTWB(file);
+        }
+      } catch (error) {
+        console.error('处理文件时出错:', error);
+        addLogEntry('错误', `处理文件时出错: ${error.message}`);
+      } finally {
+        loading.classList.add('hidden');
+      }
+    }
+
+    // 处理TWBX文件
+    async function processTWBX(file) {
+      try {
+        addLogEntry('信息', '正在解压TWBX文件...');
+        const zip = new JSZip();
+        const contents = await zip.loadAsync(file);
+
+        // 查找.twb文件
+        let twbFile = null;
+        for (let filename in contents.files) {
+          if (filename.endsWith('.twb')) {
+            twbFile = contents.files[filename];
+            break;
+          }
+        }
+
+        if (!twbFile) {
+          throw new Error('没有找到.twb文件');
+        }
+
+        addLogEntry('信息', '正在提取TWB内容...');
+        const twbContent = await twbFile.async('text');
+        processTWBContent(twbContent);
+      } catch (error) {
+        console.error('处理TWBX文件时出错:', error);
+        throw error;
+      }
+    }
+
+    // 处理TWB文件
+    async function processTWB(file) {
+      try {
+        addLogEntry('信息', '正在读取TWB文件...');
+        const reader = new FileReader();
+        
+        const twbContent = await new Promise((resolve, reject) => {
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (e) => reject(new Error('读取文件失败'));
+          reader.readAsText(file);
+        });
+        
+        processTWBContent(twbContent);
+      } catch (error) {
+        console.error('处理TWB文件时出错:', error);
+        throw error;
+      }
+    }
+
+    // 处理TWB内容
+    function processTWBContent(twbContent) {
+      addLogEntry('信息', '正在解析XML内容...');
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(twbContent, 'text/xml');
+
+      // 提取字段关系并生成图表代码
+      addLogEntry('信息', '正在提取字段关系...');
+      const fieldData = extractFieldRelationships(xmlDoc);
+      console.log('提取的字段关系:', fieldData);
+
+      if (!fieldData.fields.length) {
+        addLogEntry('错误', '未找到任何字段关系');
+        throw new Error('未找到任何字段关系');
+      }
+
+      addLogEntry('信息', `已找到 ${fieldData.fields.length} 个字段，其中计算字段 ${fieldData.fields.filter(f => f.type === 'calculation').length} 个`);
+
+      // 更新字段表格
+      updateFieldsTable(fieldData.fields);
+
+      // 生成并渲染图表
+      addLogEntry('信息', '正在生成依赖关系图...');
+      const mermaidCode = generateMermaidCode(fieldData);
+      renderMermaidDiagram(mermaidCode);
+
+      // 保存处理后的数据
+      processedData = fieldData;
+      
+      // 启用导出按钮
+      setExportButtonsState(false);
+      
+      // 添加到导出文件列表
+      updateExportFilesList();
+      
+      addLogEntry('成功', '分析完成！可以查看结果并导出数据。');
+    }
+
+    // 提取字段关系
+    function extractFieldRelationships(xmlDoc) {
+      const relationships = [];
+      const fields = new Set();
+
+      try {
+        // 获取所有datasources
+        const datasources = xmlDoc.getElementsByTagName('datasource');
+        console.log('找到数据源:', datasources.length);
+
+        for (let datasource of datasources) {
+          const datasourceName = datasource.getAttribute('caption') || datasource.getAttribute('name') || '未命名数据源';
+          
+          // 获取所有columns
+          const columns = datasource.getElementsByTagName('column');
+          console.log(`数据源 ${datasourceName} 找到列:`, columns.length);
+
+          for (let column of columns) {
+            const calculations = column.getElementsByTagName('calculation');
+            if (calculations.length > 0) {
+              const name = column.getAttribute('caption') || column.getAttribute('name');
+              const formula = calculations[0].getAttribute('formula');
+              const datatype = column.getAttribute('datatype');
+              const id = column.getAttribute('name') || name;
+
+              if (name && formula) {
+                fields.add({
+                  name: name,
+                  datatype: datatype || 'unknown',
+                  formula: formula,
+                  type: 'calculation',
+                  id: `[${id}]`,
+                  datasource: datasourceName
+                });
+
+                // 提取依赖关系
+                const matches = formula.match(/\[([^\]]+)\]/g);
+                if (matches) {
+                  const dependencies = matches
+                    .map(m => m.slice(1, -1))
+                    .filter(dep => dep !== name);
+
+                  dependencies.forEach(dep => {
+                    // 检查是否已经添加过这个字段
+                    const existingField = Array.from(fields).find(f => f.name === dep);
+                    if (!existingField) {
+                      fields.add({
+                        name: dep,
+                        type: 'field',
+                        id: `[${dep}]`,
+                        datasource: datasourceName
+                      });
+                    }
+                    
+                    relationships.push({
+                      from: dep,
+                      to: name,
+                    });
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        return {
+          relationships: relationships,
+          fields: Array.from(fields)
+        };
+      } catch (error) {
+        console.error('提取字段关系时出错:', error);
+        throw error;
+      }
+    }
+
+    // 更新字段表格
+    function updateFieldsTable(fields) {
+      const tbody = document.getElementById('fieldsTableBody');
+      tbody.innerHTML = '';
+      
+      fields.forEach(field => {
+        const tr = document.createElement('tr');
+        
+        const tdName = document.createElement('td');
+        tdName.textContent = field.name;
+        
+        const tdDataType = document.createElement('td');
+        tdDataType.textContent = field.datatype || '';
+        
+        const tdType = document.createElement('td');
+        tdType.textContent = field.type === 'calculation' ? '计算字段' : '默认字段';
+        
+        const tdFormula = document.createElement('td');
+        tdFormula.textContent = field.formula || '';
+        
+        const tdId = document.createElement('td');
+        tdId.textContent = field.id || '';
+        
+        const tdDatasource = document.createElement('td');
+        tdDatasource.textContent = field.datasource || '';
+        
+        tr.appendChild(tdName);
+        tr.appendChild(tdDataType);
+        tr.appendChild(tdType);
+        tr.appendChild(tdFormula);
+        tr.appendChild(tdId);
+        tr.appendChild(tdDatasource);
+        
+        tbody.appendChild(tr);
+      });
+    }
+
+    // 生成Mermaid代码
+    function generateMermaidCode(data) {
+      let code = 'graph LR\n';
+
+      // 添加节点
+      data.fields.forEach(field => {
+        const safeId = `n${field.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        code += `    ${safeId}["${field.name}"]\n`;
+        if (field.type === 'calculation') {
+          code += `    style ${safeId} fill:#f9f9f9,stroke:#333\n`;
+        } else {
+          code += `    style ${safeId} fill:#e1f5fe,stroke:#0288d1\n`;
+        }
+      });
+
+      // 添加关系
+      data.relationships.forEach(rel => {
+        const fromId = `n${rel.from.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        const toId = `n${rel.to.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        code += `    ${fromId} --> ${toId}\n`;
+      });
+
+      return code;
+    }
+
+    // 渲染Mermaid图表
+    async function renderMermaidDiagram(mermaidCode) {
+      const mermaidDiv = document.getElementById('mermaidDiv');
+      mermaidDiv.innerHTML = '';
+      mermaidDiv.setAttribute('class', 'mermaid');
+      mermaidDiv.textContent = mermaidCode;
+
+      try {
+        // 重新初始化mermaid以确保正确渲染
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: 'default',
+          securityLevel: 'loose',
+          flowchart: {
+            useMaxWidth: false,
+            htmlLabels: true
+          }
+        });
+        
+        const { svg } = await mermaid.render('graphDiv', mermaidCode);
+        mermaidDiv.innerHTML = svg;
+        
+        // 确保SVG填充容器
+        const svgElement = mermaidDiv.querySelector('svg');
+        if (svgElement) {
+          svgElement.style.width = '100%';
+          svgElement.style.height = '100%';
+          svgElement.style.maxWidth = 'none';
+        }
+      } catch (renderError) {
+        console.error('渲染图表时出错:', renderError);
+        addLogEntry('错误', '图表渲染失败: ' + renderError.message);
+        throw new Error('图表渲染失败: ' + renderError.message);
+      }
+    }
+
+    // 设置导出按钮状态
+    function setExportButtonsState(disabled) {
+      document.getElementById('exportSVGBtn').disabled = disabled;
+      document.getElementById('exportPNGBtn').disabled = disabled;
+      document.getElementById('exportExcelBtn').disabled = disabled;
+      document.getElementById('exportPDFBtn').disabled = disabled;
+      document.getElementById('exportCSVBtn').disabled = disabled;
+      document.getElementById('exportJSONBtn').disabled = disabled;
+    }
+
+    // 更新导出文件列表
+    function updateExportFilesList() {
+      const filesList = document.getElementById('exportFilesList');
+      filesList.innerHTML = '';
+      
+      // 添加可能的导出文件
+      const fileTypes = [
+        { name: '字段报告.xlsx', type: 'Excel格式', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
+        { name: '字段报告.pdf', type: 'PDF格式', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
+        { name: '依赖关系图.svg', type: 'SVG格式', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
+        { name: '字段数据.csv', type: 'CSV格式', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
+        { name: '依赖关系.json', type: 'JSON格式', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' }
+      ];
+      
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
+      
+      fileTypes.forEach(file => {
+        const li = document.createElement('li');
+        li.className = 'file-item';
+        
+        li.innerHTML = `
+          <svg class="file-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="${file.icon}"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          <div class="file-name">${file.name}</div>
+          <div class="file-info">${file.type} · ${dateStr}</div>
+        `;
+        
+        filesList.appendChild(li);
+      });
+    }
+
+    // 导出SVG
+    function downloadSVG() {
+      const svg = document.querySelector("#mermaidDiv svg");
+      if (!svg) {
+        console.error('未找到SVG元素');
+        addLogEntry('错误', '未找到SVG元素，无法导出');
+        return;
+      }
+
+      try {
+        const svgData = new XMLSerializer().serializeToString(svg);
+        const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+        const svgUrl = URL.createObjectURL(svgBlob);
+
+        const downloadLink = document.createElement("a");
+        downloadLink.href = svgUrl;
+        downloadLink.download = "tableau_relationships.svg";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(svgUrl);
+        
+        addLogEntry('成功', 'SVG文件导出成功');
+      } catch (error) {
+        console.error('下载SVG时出错:', error);
+        addLogEntry('错误', '下载失败: ' + error.message);
+      }
+    }
+
+    // 导出PNG
+    function downloadPNG() {
+      const svg = document.querySelector("#mermaidDiv svg");
+      if (!svg) {
+        console.error('未找到SVG元素');
+        addLogEntry('错误', '未找到SVG元素，无法导出');
+        return;
+      }
+
+      try {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        const data = new XMLSerializer().serializeToString(svg);
+        const img = new Image();
+
+        img.onload = function () {
+          canvas.width = svg.viewBox.baseVal.width || img.width;
+          canvas.height = svg.viewBox.baseVal.height || img.height;
+          ctx.drawImage(img, 0, 0);
+
+          try {
+            const pngUrl = canvas.toDataURL("image/png");
+            const downloadLink = document.createElement("a");
+            downloadLink.href = pngUrl;
+            downloadLink.download = "tableau_relationships.png";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            
+            addLogEntry('成功', 'PNG文件导出成功');
+          } catch (error) {
+            console.error('生成PNG时出错:', error);
+            addLogEntry('错误', '下载失败: ' + error.message);
+          }
+        };
+
+        img.onerror = function (error) {
+          console.error('图片加载失败:', error);
+          addLogEntry('错误', '图片加载失败');
+        };
+
+        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(data)));
+      } catch (error) {
+        console.error('下载PNG时出错:', error);
+        addLogEntry('错误', '下载失败: ' + error.message);
+      }
+    }
+
+    // 导出Excel
+    function exportExcel() {
+      if (!processedData) {
+        addLogEntry('错误', '请先上传并处理Tableau文件');
+        return;
+      }
+
+      try {
+        addLogEntry('信息', '正在创建Excel报告...');
+        
+        // 创建工作表数据
+        const worksheetData = processedData.fields.map(field => ({
+          'Field_Name': field.name,
+          'DataType': field.datatype || '',
+          'Type': field.type === 'calculation' ? '计算字段' : '默认字段',
+          'Calculation': field.formula || '',
+          'Field_ID': field.id || '',
+          'Datasource': field.datasource || ''
+        }));
+
+        // 创建工作簿
+        const wb = XLSX.utils.book_new();
+
+        // 创建工作表
+        const ws = XLSX.utils.json_to_sheet(worksheetData);
+
+        // 设置列宽
+        const colWidths = [
+          { wch: 20 }, // Field_Name
+          { wch: 15 }, // DataType
+          { wch: 15 }, // Type
+          { wch: 50 }, // Calculation
+          { wch: 20 }, // Field_ID
+          { wch: 25 }  // Datasource
+        ];
+        ws['!cols'] = colWidths;
+
+        // 添加工作表到工作簿
+        XLSX.utils.book_append_sheet(wb, ws, "GeneralDetails");
+
+        // 导出文件
+        XLSX.writeFile(wb, `tableau_fields_${new Date().getTime()}.xlsx`);
+        
+        addLogEntry('成功', 'Excel文件导出成功');
+      } catch (error) {
+        console.error('生成Excel时出错:', error);
+        addLogEntry('错误', '生成Excel失败: ' + error.message);
+      }
+    }
+
+    // 导出PDF
+    function exportPDF() {
+      if (!processedData) {
+        addLogEntry('错误', '请先上传并处理Tableau文件');
+        return;
+      }
+
+      try {
+        addLogEntry('信息', '正在创建PDF报告...');
+        
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+          orientation: 'landscape',
+          unit: 'pt',
+          format: 'a4'
+        });
+
+        // 表格数据
+        const data = processedData.fields.map(field => [
+          field.name || '',
+          field.datatype || '',
+          field.type === 'calculation' ? '计算字段' : '默认字段',
+          field.formula || '',
+          field.datasource || ''
+        ]);
+
+        // 添加标题
+        doc.setFontSize(16);
+        doc.text('Tableau Fields Export', 40, 40);
+
+        // 创建表格
+        doc.autoTable({
+          head: [['字段名称', '数据类型', '字段类型', '计算公式', '数据源']],
+          body: data,
+          startY: 60,
+          theme: 'grid',
+          styles: {
+            fontSize: 8,
+            cellPadding: 2
+          },
+          columnStyles: {
+            0: { cellWidth: 80 },
+            1: { cellWidth: 60 },
+            2: { cellWidth: 60 },
+            3: { cellWidth: 250 },
+            4: { cellWidth: 80 }
+          }
+        });
+
+        // 保存PDF
+        doc.save(`tableau_fields_${new Date().getTime()}.pdf`);
+        
+        addLogEntry('成功', 'PDF文件导出成功');
+      } catch (error) {
+        console.error('生成PDF时出错:', error);
+        addLogEntry('错误', '生成PDF失败: ' + error.message);
+      }
+    }
+    
+    // 导出CSV
+    function exportCSV() {
+      if (!processedData) {
+        addLogEntry('错误', '请先上传并处理Tableau文件');
+        return;
+      }
+      
+      try {
+        addLogEntry('信息', '正在创建CSV文件...');
+        
+        // 创建CSV内容
+        const headers = ['字段名称', '数据类型', '字段类型', '计算公式', '字段ID', '数据源'];
+        
+        let csvContent = headers.join(',') + '\n';
+        
+        processedData.fields.forEach(field => {
+          const row = [
+            `"${(field.name || '').replace(/"/g, '""')}"`,
+            `"${(field.datatype || '').replace(/"/g, '""')}"`,
+            `"${(field.type === 'calculation' ? '计算字段' : '默认字段').replace(/"/g, '""')}"`,
+            `"${(field.formula || '').replace(/"/g, '""')}"`,
+            `"${(field.id || '').replace(/"/g, '""')}"`,
+            `"${(field.datasource || '').replace(/"/g, '""')}"`
+          ];
+          
+          csvContent += row.join(',') + '\n';
+        });
+        
+        // 创建Blob并下载
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `tableau_fields_${new Date().getTime()}.csv`);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        addLogEntry('成功', 'CSV文件导出成功');
+      } catch (error) {
+        console.error('生成CSV时出错:', error);
+        addLogEntry('错误', '生成CSV失败: ' + error.message);
+      }
+    }
+    
+    // 导出JSON
+    function exportJSON() {
+      if (!processedData) {
+        addLogEntry('错误', '请先上传并处理Tableau文件');
+        return;
+      }
+      
+      try {
+        addLogEntry('信息', '正在创建JSON文件...');
+        
+        // 创建JSON内容
+        const jsonContent = JSON.stringify(processedData, null, 2);
+        
+        // 创建Blob并下载
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `tableau_relationships_${new Date().getTime()}.json`);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        addLogEntry('成功', 'JSON文件导出成功');
+      } catch (error) {
+        console.error('生成JSON时出错:', error);
+        addLogEntry('错误', '生成JSON失败: ' + error.message);
+      }
+    }
+  </script>
+</body>
+
+</html>
