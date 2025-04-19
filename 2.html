@@ -949,74 +949,271 @@
       addLogEntry('成功', '分析完成！可以查看结果并导出数据。');
     }
 
-    // 提取字段关系
+    /**
+     * 从解析后的 TWB XML 文档中提取字段和计算信息
+     * @param {XMLDocument} xmlDoc - 解析后的 XML 文档对象
+     * @returns {object} - 返回包含字段列表和关系列表的对象 { fields: [], relationships: [] }
+     */
     function extractFieldRelationships(xmlDoc) {
-      const relationships = [];
-      const fields = new Set();
+      const allFields = []; // 用于存储所有提取的字段信息
+      const relationships = []; // 用于存储字段间的依赖关系
+      let counter = 0; // 简单的计数器，用于生成唯一标识或排序
 
       try {
-        // 获取所有datasources
+        // 获取所有的 <datasource> 元素
         const datasources = xmlDoc.getElementsByTagName('datasource');
         console.log('找到数据源:', datasources.length);
 
-        for (let datasource of datasources) {
-          const datasourceName = datasource.getAttribute('caption') || datasource.getAttribute('name') || '未命名数据源';
+        // 遍历每个数据源
+        for (const ds of datasources) {
+          // 获取数据源名称和标题 (优先使用标题 caption, 否则用 name)
+          const dsName = ds.getAttribute('name') || 'Unknown Datasource'; // 数据源内部名称
+          const dsCaption = ds.getAttribute('caption') || dsName; // 数据源显示名称
+          const isParameterDs = dsName.toLowerCase() === 'parameters'; // 判断是否是参数数据源
 
-          // 获取所有columns
-          const columns = datasource.getElementsByTagName('column');
-          console.log(`数据源 ${datasourceName} 找到列:`, columns.length);
+          // 获取数据源下的所有 <column> 元素
+          const columns = ds.getElementsByTagName('column');
+          console.log(`数据源 ${dsCaption} 找到列:`, columns.length);
 
-          for (let column of columns) {
-            const calculations = column.getElementsByTagName('calculation');
-            if (calculations.length > 0) {
-              const name = column.getAttribute('caption') || column.getAttribute('name');
-              const formula = calculations[0].getAttribute('formula');
-              const datatype = column.getAttribute('datatype');
-              const id = column.getAttribute('name') || name;
+          for (const col of columns) {
+            // 获取字段的各种属性
+            const fieldId = col.getAttribute('id') || `[${col.getAttribute('name') || `col_${counter}`}]`; // 字段ID (可能需要生成)
+            const fieldName = col.getAttribute('name') || fieldId; // 字段名
+            const fieldCaption = col.getAttribute('caption') || fieldName; // 字段标题 (显示用)
 
-              if (name && formula) {
-                fields.add({
-                  name: name,
-                  datatype: datatype || 'unknown',
-                  formula: formula,
-                  type: 'calculation',
-                  id: `[${id}]`,
-                  datasource: datasourceName
+            // 查找字段下的 <calculation> 元素
+            const calculationTag = col.getElementsByTagName('calculation')[0];
+            const fieldCalculation = calculationTag ? calculationTag.getAttribute('formula') : null; // 获取计算公式
+
+            // 查找字段描述
+            const descTag = col.getElementsByTagName('desc')[0]; // 查找 <desc> 标签
+            // 描述通常在 <formatted-text><run>...</run></formatted-text> 结构里
+            const descriptionElement = descTag ? descTag.getElementsByTagName('formatted-text')[0]?.getElementsByTagName('run')[0] : null;
+            const fieldDesc = descriptionElement ? descriptionElement.textContent : null; // 获取描述文本
+
+            // 构建字段数据对象
+            const fieldData = {
+              counter: counter++, // 计数器
+              datasource_name: dsName, // 数据源内部名
+              datasource_caption: dsCaption, // 数据源显示名
+              alias: col.getAttribute('alias'), // 别名
+              field_calculation: fieldCalculation, // 计算公式 (后面可能会被友好名称替换)
+              field_calculation_bk: fieldCalculation, // 备份原始计算公式，用于依赖分析
+              field_caption: fieldCaption, // 字段显示名
+              field_datatype: col.getAttribute('datatype'), // 数据类型 (string, integer, etc.)
+              field_def_agg: col.getAttribute('default-aggregation'), // 默认聚合方式 (sum, avg, etc.)
+              field_desc: fieldDesc, // 字段描述
+              field_hidden: col.getAttribute('hidden') === 'true', // 是否隐藏
+              field_id: `[${fieldName}]`, // 字段ID (通常是 [Name] 格式)
+              // 语义角色 (近似判断，TWB XML 结构可能变化)
+              field_is_nominal: col.getAttribute('semantic-role') === '[Nominal]',
+              field_is_ordinal: col.getAttribute('semantic-role') === '[Ordinal]',
+              field_is_quantitative: col.getAttribute('semantic-role') === '[Measure]',
+              field_name: fieldName, // 字段内部名
+              field_role: col.getAttribute('role'), // 角色 (dimension, measure)
+              field_type: col.getAttribute('type'), // 类型 (quantitative, ordinal, nominal)
+              // 兼容旧代码的属性
+              name: fieldCaption, // 兼容旧代码的字段名
+              datatype: col.getAttribute('datatype') || 'unknown', // 兼容旧代码的数据类型
+              formula: fieldCalculation, // 兼容旧代码的计算公式
+              id: `[${fieldName}]`, // 兼容旧代码的ID
+              datasource: dsCaption // 兼容旧代码的数据源名
+            };
+
+            // 初步分类字段类型 (后续会精炼)
+            if (isParameterDs || (col.parentElement && col.parentElement.nodeName === 'datasource' && col.parentElement.getAttribute('name')?.toLowerCase() === 'parameters')) {
+              // 如果字段属于 'Parameters' 数据源，则分类为参数
+              fieldData.category = 'Parameters';
+              fieldData.type = 'parameter'; // 兼容旧代码
+            } else if (fieldCalculation !== null) {
+              // 如果有计算公式，则分类为计算字段
+              fieldData.category = 'Calculated_Field';
+              fieldData.type = 'calculation'; // 兼容旧代码
+            } else {
+              // 否则为默认字段
+              fieldData.category = 'Default_Field';
+              fieldData.type = 'field'; // 兼容旧代码
+            }
+
+            allFields.push(fieldData); // 将字段数据添加到列表
+          }
+
+          // 特殊处理 <datasource name='Parameters'> 下直接列出的 <param> 元素
+          if (isParameterDs) {
+            const parameters = ds.getElementsByTagName('param'); // 查找 <param> 标签 (标签名可能需确认)
+            for (const param of parameters) {
+              const fieldId = `[${param.getAttribute('name')}]`; // 参数的 ID 通常是 [ParamName]
+              // 检查是否已通过 <column> 添加过 (不太可能，但以防万一)
+              if (!allFields.some(f => f.field_id === fieldId && f.datasource_name === 'Parameters')) {
+                // 如果未添加，则构建参数的字段数据并添加
+                allFields.push({
+                  counter: counter++,
+                  datasource_name: dsName,
+                  datasource_caption: dsCaption,
+                  alias: param.getAttribute('alias'),
+                  field_calculation: null, // 参数通常没有计算公式
+                  field_calculation_bk: null,
+                  field_caption: param.getAttribute('caption') || param.getAttribute('name'), // 显示名
+                  field_datatype: param.getAttribute('datatype'), // 数据类型
+                  field_desc: null, // 参数一般没有 <desc>
+                  field_hidden: false, // 参数通常不隐藏
+                  field_id: fieldId, // ID
+                  field_name: param.getAttribute('name'), // 内部名
+                  field_role: 'parameter', // 角色
+                  field_type: 'quantitative', // 类型 (通常，取决于参数定义)
+                  category: 'Parameters', // 分类为参数
+                  // 兼容旧代码的属性
+                  name: param.getAttribute('caption') || param.getAttribute('name'),
+                  datatype: param.getAttribute('datatype') || 'unknown',
+                  type: 'parameter',
+                  id: fieldId,
+                  datasource: dsCaption
                 });
-
-                // 提取依赖关系
-                const matches = formula.match(/\[([^\]]+)\]/g);
-                if (matches) {
-                  const dependencies = matches
-                    .map(m => m.slice(1, -1))
-                    .filter(dep => dep !== name);
-
-                  dependencies.forEach(dep => {
-                    // 检查是否已经添加过这个字段
-                    const existingField = Array.from(fields).find(f => f.name === dep);
-                    if (!existingField) {
-                      fields.add({
-                        name: dep,
-                        type: 'field',
-                        id: `[${dep}]`,
-                        datasource: datasourceName
-                      });
-                    }
-
-                    relationships.push({
-                      from: dep,
-                      to: name,
-                    });
-                  });
-                }
               }
             }
           }
         }
 
+        // --- 数据后处理 ---
+
+        // 1. 创建字段 ID -> 友好名称 [FieldName] 的映射，用于替换计算公式中的 ID
+        const calcMapRaw = new Map(); // key: 原始ID (无括号), value: 友好名称 [FieldName]
+        allFields.forEach(field => {
+          // 包含计算字段、参数和默认字段，因为它们都可能在其他计算中被引用
+          const cleanId = field.field_id.replace(/[\[\]]/g, ''); // 移除 ID 中的方括号
+          const friendlyName = `[${field.field_caption || field.field_name}]`; // 使用 Caption 或 Name 作为友好名称
+          // 优先使用计算字段/参数的名称，避免被同名默认字段覆盖
+          if (field.category === 'Calculated_Field' || field.category === 'Parameters') {
+            calcMapRaw.set(cleanId, friendlyName);
+          } else if (!calcMapRaw.has(cleanId)) { // 如果不是计算/参数，且该 cleanId 还未被映射，则添加默认字段的映射
+            calcMapRaw.set(cleanId, friendlyName);
+          }
+        });
+
+        // 2. 替换计算公式中的字段 ID 为友好名称 (对 `field_calculation` 进行修改)
+        allFields.forEach(field => {
+          if (field.field_calculation) { // 只处理有计算公式的字段
+            let formula = field.field_calculation;
+            // 获取所有映射的 key (原始ID，无括号)，按长度降序排序
+            // 排序是为了优先替换长名称，避免如 [Sales] 错误替换 [Sales Amount] 的一部分
+            const sortedKeys = Array.from(calcMapRaw.keys()).sort((a, b) => b.length - a.length);
+
+            sortedKeys.forEach(keyId => {
+              // 使用正则表达式精确替换 `[原始ID]` 为对应的 `[友好名称]`
+              // 需要转义 keyId 中的正则表达式特殊字符
+              const escapedKeyId = keyId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+              // 创建正则表达式，匹配方括号包围的、转义后的 keyId，全局替换，忽略大小写 (g, i)
+              const regex = new RegExp(`\\[${escapedKeyId}\\]`, 'gi');
+              const replacement = calcMapRaw.get(keyId); // 获取对应的友好名称
+              if (replacement) {
+                formula = formula.replace(regex, replacement);
+              }
+            });
+            field.field_calculation = formula; // 更新字段对象的计算公式
+            field.formula = formula; // 同时更新兼容旧代码的属性
+          }
+        });
+
+        // 3. 过滤重复字段 (特别是参数可能在多个数据源下出现)
+        // 策略：优先保留来自 'Parameters' 数据源的参数，对于其他字段保留第一次出现的
+        const uniqueFields = []; // 存储去重后的字段
+        const seenFieldIds = new Set(); // 存储已经添加的字段 ID
+
+        // 先按数据源排序，将 'Parameters' 数据源的字段排在前面
+        allFields
+          .sort((a, b) => {
+            if (a.datasource_name === 'Parameters' && b.datasource_name !== 'Parameters') return -1; // a 来自 Parameters，排前面
+            if (a.datasource_name !== 'Parameters' && b.datasource_name === 'Parameters') return 1; // b 来自 Parameters，排前面
+            return a.counter - b.counter; // 其他情况保持原始相对顺序
+          })
+          .forEach(field => {
+            // 如果这个字段的 ID 还没见过，就添加到 uniqueFields 列表，并记录 ID
+            if (!seenFieldIds.has(field.field_id)) {
+              uniqueFields.push(field);
+              seenFieldIds.add(field.field_id);
+            }
+            // (这里的逻辑保证了如果 Parameters 数据源的同 ID 字段先出现，就会被保留)
+          });
+
+        // 4. 最终排序，用于表格显示
+        const preferenceOrder = ['Parameters', 'Calculated_Field', 'Default_Field']; // 定义类型优先级
+        uniqueFields.sort((a, b) => {
+          const typeAIndex = preferenceOrder.indexOf(a.category); // 获取 a 的类型优先级
+          const typeBIndex = preferenceOrder.indexOf(b.category); // 获取 b 的类型优先级
+          if (typeAIndex !== typeBIndex) return typeAIndex - typeBIndex; // 按类型优先级排序
+
+          // 类型相同时，按数据源名称排序
+          if (a.datasource_caption < b.datasource_caption) return -1;
+          if (a.datasource_caption > b.datasource_caption) return 1;
+
+          // 数据源名称也相同时，按字段名称排序
+          if (a.field_name < b.field_name) return -1;
+          if (a.field_name > b.field_name) return 1;
+
+          return a.counter - b.counter; // 最后按原始顺序 (counter) 排序
+        });
+
+        // 5. 提取依赖关系
+        uniqueFields.forEach(field => {
+          if (field.field_calculation) { // 只处理有计算公式的字段
+            // 提取公式中的所有字段引用 [Field]
+            const matches = field.field_calculation.match(/\[([^\]]+)\]/g);
+            if (matches) {
+              // 提取引用的字段名（去掉方括号）
+              const dependencies = matches
+                .map(m => m.slice(1, -1))
+                .filter(dep => dep !== field.field_caption); // 过滤掉自引用
+
+              // 为每个依赖添加关系
+              dependencies.forEach(dep => {
+                relationships.push({
+                  from: dep,
+                  to: field.field_caption,
+                });
+              });
+            }
+          }
+        });
+
+        // 6. 确保所有依赖关系中的字段都存在
+        const allFieldNames = new Set(uniqueFields.map(f => f.field_caption));
+        for (let rel of relationships) {
+          if (!allFieldNames.has(rel.from)) {
+            // 如果依赖关系中的来源字段不存在，则添加一个默认字段
+            uniqueFields.push({
+              counter: counter++,
+              field_caption: rel.from,
+              field_name: rel.from,
+              name: rel.from,
+              type: 'field',
+              category: 'Default_Field',
+              id: `[${rel.from}]`,
+              field_id: `[${rel.from}]`,
+              datasource: 'Unknown',
+              datasource_caption: 'Unknown'
+            });
+            allFieldNames.add(rel.from); // 更新字段名集合
+          }
+        }
+
+        // 7. 输出调试信息
+        console.log('===== 所有字段 =====');
+        uniqueFields.forEach(field => {
+          if (field.type === 'calculation') {
+            console.log(`${field.name} (${field.type}): ${field.formula}`);
+          } else {
+            console.log(`${field.name} (${field.type})`);
+          }
+        });
+
+        console.log('===== 所有依赖关系 =====');
+        relationships.forEach(rel => {
+          console.log(`${rel.from} -> ${rel.to}`);
+        });
+
         return {
           relationships: relationships,
-          fields: Array.from(fields)
+          fields: uniqueFields
         };
       } catch (error) {
         console.error('提取字段关系时出错:', error);
@@ -1024,7 +1221,10 @@
       }
     }
 
-    // 更新字段表格
+    /**
+     * 更新字段表格显示
+     * @param {Array} fields - 字段数组
+     */
     function updateFieldsTable(fields) {
       const tbody = document.getElementById('fieldsTableBody');
       tbody.innerHTML = '';
@@ -1032,24 +1232,49 @@
       fields.forEach(field => {
         const tr = document.createElement('tr');
 
+        // 根据字段类型设置行的类名，用于样式区分
+        if (field.category === 'Calculated_Field') {
+          tr.classList.add('calculated-field-row');
+        } else if (field.category === 'Parameters') {
+          tr.classList.add('parameter-field-row');
+        }
+
+        // 字段名称
         const tdName = document.createElement('td');
-        tdName.textContent = field.name;
+        tdName.textContent = field.field_caption || field.name;
+        tdName.title = field.field_desc || ''; // 如果有描述，显示为提示
 
+        // 数据类型
         const tdDataType = document.createElement('td');
-        tdDataType.textContent = field.datatype || '';
+        tdDataType.textContent = field.field_datatype || field.datatype || '';
 
+        // 字段类型
         const tdType = document.createElement('td');
-        tdType.textContent = field.type === 'calculation' ? '计算字段' : '默认字段';
+        if (field.category === 'Calculated_Field') {
+          tdType.textContent = '计算字段';
+        } else if (field.category === 'Parameters') {
+          tdType.textContent = '参数';
+        } else {
+          tdType.textContent = '默认字段';
+        }
 
+        // 计算公式
         const tdFormula = document.createElement('td');
-        tdFormula.textContent = field.formula || '';
+        tdFormula.textContent = field.field_calculation || field.formula || '';
+        if (field.field_calculation) {
+          // 添加公式的样式，使其更易读
+          tdFormula.classList.add('formula-cell');
+        }
 
+        // 字段ID
         const tdId = document.createElement('td');
-        tdId.textContent = field.id || '';
+        tdId.textContent = field.field_id || field.id || '';
 
+        // 数据源
         const tdDatasource = document.createElement('td');
-        tdDatasource.textContent = field.datasource || '';
+        tdDatasource.textContent = field.datasource_caption || field.datasource || '';
 
+        // 添加所有单元格到行
         tr.appendChild(tdName);
         tr.appendChild(tdDataType);
         tr.appendChild(tdType);
@@ -1059,34 +1284,162 @@
 
         tbody.appendChild(tr);
       });
+
+      // 添加表格摘要信息
+      const tableInfo = document.getElementById('tableInfo');
+      if (tableInfo) {
+        const calcCount = fields.filter(f => f.category === 'Calculated_Field').length;
+        const paramCount = fields.filter(f => f.category === 'Parameters').length;
+        const defaultCount = fields.filter(f => f.category === 'Default_Field').length;
+
+        tableInfo.innerHTML = `共 ${fields.length} 个字段（${calcCount} 个计算字段，${paramCount} 个参数，${defaultCount} 个默认字段）`;
+      }
     }
 
-    // 生成Mermaid代码
+    /**
+     * 生成 Mermaid 代码用于可视化字段依赖关系
+     * @param {Object} data - 包含字段和关系的数据对象
+     * @returns {string} - 返回 Mermaid 格式的代码字符串
+     */
     function generateMermaidCode(data) {
-      let code = 'graph LR\n';
+      // --- Mermaid ID 生成与映射 ---
+      // 生成 Mermaid 节点 ID (AA, AB, ..., BA, BB, ..., AAA, AAB, ...)
+      const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      let collatedAbc = [];
+      // 双字母组合
+      for (let i = 0; i < abc.length; i++) {
+        for (let j = 0; j < abc.length; j++) {
+          collatedAbc.push(abc[i] + abc[j]);
+        }
+      }
+      // 三字母组合 (以备节点过多时使用)
+      for (let i = 0; i < abc.length; i++) {
+        for (let j = 0; j < abc.length; j++) {
+          for (let k = 0; k < abc.length; k++) {
+            collatedAbc.push(abc[i] + abc[j] + abc[k]);
+          }
+        }
+      }
 
-      // 添加节点
+      // 映射: 字段名称 -> Mermaid 短 ID
+      const fieldNameToMermaidIdMap = new Map();
+      // 映射: Mermaid 短 ID -> 字段显示名称 [FieldName]
+      const mermaidIdToNameMap = new Map();
+      // 映射: Mermaid 短 ID -> 字段类型 (用于样式和图例)
+      const mermaidIdToCategoryMap = new Map();
+
+      let nodeIndex = 0; // 用于从 collatedAbc 中获取唯一 ID
+
+      // 为所有字段（包括默认、计算、参数）分配 Mermaid ID
       data.fields.forEach(field => {
-        const safeId = `n${field.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        code += `    ${safeId}["${field.name}"]\n`;
-        if (field.type === 'calculation') {
-          code += `    style ${safeId} fill:#f9f9f9,stroke:#333,stroke-width:2px\n`;
+        if (nodeIndex < collatedAbc.length) {
+          const mermaidId = collatedAbc[nodeIndex++]; // 获取下一个可用 ID
+          const fieldName = field.field_caption || field.name; // 使用显示名称
+          fieldNameToMermaidIdMap.set(fieldName, mermaidId); // 存储映射关系
+          // 存储 Mermaid ID 到显示名称的映射 (移除名称中的引号以防破坏语法)
+          const displayName = `[${fieldName.replace(/["'`]/g, '')}]`;
+          mermaidIdToNameMap.set(mermaidId, displayName);
+          // 存储 Mermaid ID 到类型的映射
+          mermaidIdToCategoryMap.set(mermaidId, field.category || field.type);
         } else {
-          code += `    style ${safeId} fill:#e1f5fe,stroke:#0288d1,stroke-width:1.5px\n`;
+          console.warn("警告: Mermaid ID 不足！部分字段可能无法在图中正确显示。");
         }
       });
 
-      // 添加关系
+      // --- 依赖关系分析 ---
+      const links = new Set(); // 使用 Set 存储连接关系，自动去重 "A --> B"
+
+      // 遍历所有关系，添加到连接集合
       data.relationships.forEach(rel => {
-        const fromId = `n${rel.from.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        const toId = `n${rel.to.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        code += `    ${fromId} --> ${toId}\n`;
+        const fromId = fieldNameToMermaidIdMap.get(rel.from);
+        const toId = fieldNameToMermaidIdMap.get(rel.to);
+        if (fromId && toId) {
+          links.add(`${fromId} --> ${toId}`);
+        }
       });
 
-      return code;
+      // --- 构建 Mermaid 代码 ---
+      const uniqueNodesInLinks = new Set(); // 存储所有在连接中出现的节点 ID
+      links.forEach(link => {
+        const parts = link.split(' --> ');
+        uniqueNodesInLinks.add(parts[0]); // 添加来源节点
+        uniqueNodesInLinks.add(parts[1]); // 添加目标节点
+      });
+
+      // 将所有计算字段和参数节点也加入，确保即使它们没有连接也会被定义
+      data.fields.forEach(field => {
+        if (field.category === 'Calculated_Field' || field.category === 'Parameters' || field.type === 'calculation' || field.type === 'parameter') {
+          const fieldName = field.field_caption || field.name;
+          const mid = fieldNameToMermaidIdMap.get(fieldName);
+          if (mid) uniqueNodesInLinks.add(mid);
+        }
+      });
+
+      const nodeDefinitions = []; // 存储节点定义的数组，例如 AA["[节点名]"]:::foo
+      const legendItems = []; // 存储图例信息的数组
+
+      // 遍历所有需要定义的节点
+      uniqueNodesInLinks.forEach(nodeId => {
+        const nodeName = mermaidIdToNameMap.get(nodeId) || nodeId; // 获取节点显示名称
+        const nodeCategory = mermaidIdToCategoryMap.get(nodeId); // 获取节点类型
+
+        let nodeClass = ''; // Mermaid 节点的 CSS 类
+        let legendClass = ''; // 图例条目的 CSS 类
+
+        // 根据节点类型分配样式类
+        if (nodeCategory === 'Default_Field' || nodeCategory === 'field') {
+          nodeClass = ':::default-field'; // Mermaid 中应用 .default-field 样式 (浅蓝色背景)
+          legendClass = 'default-field-legend'; // 图例中使用特殊颜色
+        } else if (nodeCategory === 'Calculated_Field' || nodeCategory === 'calculation') {
+          nodeClass = ':::calculated-field'; // 计算字段样式 (浅绿色)
+          legendClass = 'calculated-field-legend';
+        } else if (nodeCategory === 'Parameters' || nodeCategory === 'parameter') {
+          nodeClass = ':::parameter-field'; // 参数样式 (浅紫色)
+          legendClass = 'parameter-field-legend';
+        }
+        // 添加节点定义到数组
+        nodeDefinitions.push(`${nodeId}["${nodeName}"]${nodeClass}`);
+        // 添加图例信息到数组
+        legendItems.push({ id: nodeId, name: nodeName, cssClass: legendClass });
+      });
+
+      // --- 生成图例 HTML ---
+      // 按节点 ID 字母顺序排序图例
+      legendItems.sort((a, b) => a.id.localeCompare(b.id));
+      let legendHtml = '<strong>图例:</strong><ul>'; // 图例起始标签
+      legendItems.forEach(item => {
+        // 为每个图例项创建列表项
+        legendHtml += `<li><span class="node-id ${item.cssClass}">${item.id}:</span> <span class="node-name">${item.name}</span></li>`;
+      });
+      legendHtml += '</ul>'; // 图例结束标签
+
+      // 更新图例容器
+      const legendContainer = document.getElementById('legendContainer');
+      if (legendContainer) {
+        legendContainer.innerHTML = legendHtml;
+      }
+
+      // --- 构建最终 Mermaid 代码字符串 ---
+      const mermaidCode = `flowchart LR
+    %% 样式定义
+    classDef default-field fill:#e1f5fe,stroke:#0288d1,stroke-width:1.5px
+    classDef calculated-field fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    classDef parameter-field fill:#f3e5f5,stroke:#6a1b9a,stroke-width:1.5px
+
+    %% 节点定义
+    ${nodeDefinitions.join('\n    ')}
+
+    %% 连接关系
+    ${Array.from(links).join('\n    ')}`;
+
+      return mermaidCode;
     }
 
-    // 渲染Mermaid图表
+    /**
+     * 渲染 Mermaid 图表
+     * @param {string} mermaidCode - Mermaid 格式的代码字符串
+     * @returns {Promise<void>}
+     */
     async function renderMermaidDiagram(mermaidCode) {
       const mermaidDiv = document.getElementById('mermaidDiv');
       mermaidDiv.innerHTML = '';
@@ -1094,7 +1447,7 @@
       mermaidDiv.textContent = mermaidCode;
 
       try {
-        // 重新初始化mermaid以确保正确渲染
+        // 重新初始化 mermaid 以确保正确渲染
         mermaid.initialize({
           startOnLoad: false,
           theme: 'default',
@@ -1103,23 +1456,33 @@
             useMaxWidth: false,
             htmlLabels: true,
             curve: 'basis',
-            nodeSpacing: 60,
-            rankSpacing: 80
+            nodeSpacing: 80, // 增加节点间距，使图表更清晰
+            rankSpacing: 100, // 增加层级间距，使图表更清晰
+            diagramPadding: 20 // 添加图表内边距
           }
         });
 
+        // 渲染图表
         const { svg } = await mermaid.render('graphDiv', mermaidCode);
         mermaidDiv.innerHTML = svg;
 
-        // 确保SVG填充容器
+        // 确保 SVG 填充容器并设置样式
         const svgElement = mermaidDiv.querySelector('svg');
         if (svgElement) {
+          // 设置 SVG 样式
           svgElement.style.width = '100%';
           svgElement.style.height = '100%';
           svgElement.style.maxWidth = 'none';
+          svgElement.style.minHeight = '500px'; // 设置最小高度，确保图表有足够的显示空间
 
           // 初始缩放比例
-          window.currentZoom = 1;
+          window.currentZoom = 1.2; // 默认缩放比例设置为 1.2，使图表初始就有足够大小
+
+          // 添加拖动功能
+          makeDraggable(svgElement);
+
+          // 应用初始缩放
+          applyZoom(svgElement, window.currentZoom);
 
           // 添加缩放按钮事件
           document.getElementById('zoomInBtn').addEventListener('click', () => {
@@ -1135,30 +1498,114 @@
           });
 
           document.getElementById('resetZoomBtn').addEventListener('click', () => {
-            window.currentZoom = 1;
+            window.currentZoom = 1.2; // 重置为初始缩放比例
             applyZoom(svgElement, window.currentZoom);
+            // 重置拖动位置
+            const g = svgElement.querySelector('g');
+            if (g) {
+              g.style.transform = `scale(${window.currentZoom})`;
+              g.style.transformOrigin = 'center center';
+            }
           });
         }
+
+        // 显示成功消息
+        addLogEntry('成功', '依赖关系图表渲染完成');
       } catch (renderError) {
         console.error('渲染图表时出错:', renderError);
         addLogEntry('错误', '图表渲染失败: ' + renderError.message);
-        throw new Error('图表渲染失败: ' + renderError.message);
+
+        // 在错误情况下显示错误信息和原始代码，方便调试
+        mermaidDiv.innerHTML = `<div class="error-message">渲染图表时出错: ${renderError.message}</div>
+                              <pre class="error-code">${mermaidCode}</pre>`;
       }
     }
 
-    // 应用缩放
+    /**
+     * 使 SVG 元素可拖动
+     * @param {SVGElement} svgElement - SVG 元素
+     */
+    function makeDraggable(svgElement) {
+      const container = document.getElementById('mermaidContainer');
+      const g = svgElement.querySelector('g');
+      if (!g || !container) return;
+
+      let isDragging = false;
+      let startX, startY, startScrollLeft, startScrollTop;
+
+      // 鼠标按下事件
+      container.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        container.style.cursor = 'grabbing';
+        startX = e.pageX;
+        startY = e.pageY;
+        startScrollLeft = container.scrollLeft;
+        startScrollTop = container.scrollTop;
+      });
+
+      // 鼠标移动事件
+      container.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+
+        // 计算鼠标移动距离，并乘以因子使拖动更流畅
+        const dragFactor = 2.0; // 增加拖动距离
+        const dx = (e.pageX - startX) * dragFactor;
+        const dy = (e.pageY - startY) * dragFactor;
+
+        // 更新滚动位置
+        container.scrollLeft = startScrollLeft - dx;
+        container.scrollTop = startScrollTop - dy;
+      });
+
+      // 鼠标松开事件
+      container.addEventListener('mouseup', () => {
+        isDragging = false;
+        container.style.cursor = 'grab';
+      });
+
+      // 鼠标离开事件
+      container.addEventListener('mouseleave', () => {
+        isDragging = false;
+        container.style.cursor = 'grab';
+      });
+
+      // 设置初始光标样式
+      container.style.cursor = 'grab';
+    }
+
+    /**
+     * 应用缩放到 SVG 元素
+     * @param {SVGElement} svgElement - SVG 元素
+     * @param {number} zoomLevel - 缩放级别
+     */
     function applyZoom(svgElement, zoomLevel) {
       const container = document.getElementById('mermaidContainer');
       const g = svgElement.querySelector('g');
-      if (g) {
+      if (g && container) {
+        // 记录当前滚动位置的百分比
+        const scrollLeftPercent = container.scrollLeft / container.scrollWidth;
+        const scrollTopPercent = container.scrollTop / container.scrollHeight;
+
+        // 应用缩放
         g.style.transform = `scale(${zoomLevel})`;
         g.style.transformOrigin = 'center center';
 
-        // 调整容器滚动位置到中心
-        const svgWidth = svgElement.getBoundingClientRect().width;
-        const svgHeight = svgElement.getBoundingClientRect().height;
-        container.scrollLeft = (svgWidth * zoomLevel - svgWidth) / 2;
-        container.scrollTop = (svgHeight * zoomLevel - svgHeight) / 2;
+        // 等待下一帧更新尺寸
+        requestAnimationFrame(() => {
+          // 根据百分比计算新的滚动位置，保持相对位置不变
+          container.scrollLeft = scrollLeftPercent * container.scrollWidth;
+          container.scrollTop = scrollTopPercent * container.scrollHeight;
+
+          // 更新缩放信息显示
+          const zoomInfo = document.getElementById('zoomInfo');
+          if (zoomInfo) {
+            zoomInfo.textContent = `缩放: ${Math.round(zoomLevel * 100)}%`;
+          }
+        });
+
+        // 更新容器样式，确保可以滚动
+        container.style.overflow = 'auto';
       }
     }
 
@@ -1251,147 +1698,211 @@
       }
     }
 
-    // 导出Excel
+    /**
+     * 将字段数据导出为 Excel 文件
+     */
     function exportExcel() {
-      if (!processedData) {
-        addLogEntry('错误', '请先上传并处理Tableau文件');
+      if (!processedData || !processedData.fields || processedData.fields.length === 0) {
+        addLogEntry('错误', '没有可导出的数据。请先上传并处理 Tableau 文件');
         return;
       }
 
       try {
-        addLogEntry('信息', '正在创建Excel报告...');
+        addLogEntry('信息', '正在创建 Excel 报告...');
 
-        // 创建工作表数据
-        const worksheetData = processedData.fields.map(field => ({
-          'Field_Name': field.name,
-          'DataType': field.datatype || '',
-          'Type': field.type === 'calculation' ? '计算字段' : '默认字段',
-          'Calculation': field.formula || '',
-          'Field_ID': field.id || '',
-          'Datasource': field.datasource || ''
+        // 准备 SheetJS 需要的数据格式 (对象数组)
+        const headers = ['字段名称', '数据类型', '类型', '计算公式', '数据源', '字段 ID'];
+        const dataForSheet = processedData.fields.map(field => ({
+          '字段名称': (field.field_caption || field.name).replace(/[\[\]]/g, ''), // 清理名称
+          '数据类型': field.field_datatype || field.datatype || '',
+          '类型': getFieldTypeDisplayName(field),
+          '计算公式': field.field_calculation || field.formula || '',
+          '数据源': field.datasource_caption || field.datasource || '',
+          '字段 ID': field.field_id || field.id || ''
         }));
 
-        // 创建工作簿
-        const wb = XLSX.utils.book_new();
+        // 使用 SheetJS 工具函数将 JSON 数据转换为工作表对象
+        // header 参数指定了列的顺序和名称
+        const ws = XLSX.utils.json_to_sheet(dataForSheet, { header: headers });
 
-        // 创建工作表
-        const ws = XLSX.utils.json_to_sheet(worksheetData);
-
-        // 设置列宽
-        const colWidths = [
-          { wch: 20 }, // Field_Name
-          { wch: 15 }, // DataType
-          { wch: 15 }, // Type
-          { wch: 50 }, // Calculation
-          { wch: 20 }, // Field_ID
-          { wch: 25 }  // Datasource
+        // 设置列宽 (wch 单位是字符宽度近似值)
+        ws['!cols'] = [
+          { wch: 30 }, // 字段名称
+          { wch: 15 }, // 数据类型
+          { wch: 18 }, // 类型
+          { wch: 60 }, // 计算公式 (给足宽度)
+          { wch: 25 }, // 数据源
+          { wch: 40 }  // 字段 ID
         ];
-        ws['!cols'] = colWidths;
 
-        // 添加工作表到工作簿
-        XLSX.utils.book_append_sheet(wb, ws, "GeneralDetails");
+        // 创建一个新的工作簿对象
+        const wb = XLSX.utils.book_new();
+        // 将工作表添加到工作簿，并命名为 '字段详情'
+        XLSX.utils.book_append_sheet(wb, ws, '字段详情');
 
-        // 导出文件
-        XLSX.writeFile(wb, `tableau_fields_${new Date().getTime()}.xlsx`);
+        // 生成 Excel 文件名
+        const filename = document.getElementById('filename').value || 'tableau_workbook';
+        const excelFileName = `${filename}_字段分析_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
-        addLogEntry('成功', 'Excel文件导出成功');
+        // 使用 SheetJS 的 writeFile 函数生成并触发浏览器下载
+        XLSX.writeFile(wb, excelFileName);
+
+        addLogEntry('成功', `Excel 文件 '${excelFileName}' 已生成。`);
       } catch (error) {
-        console.error('生成Excel时出错:', error);
-        addLogEntry('错误', '生成Excel失败: ' + error.message);
+        console.error('生成 Excel 时出错:', error);
+        addLogEntry('错误', '生成 Excel 失败: ' + error.message);
       }
     }
 
-    // 导出PDF
+    /**
+     * 获取字段类型的显示名称
+     * @param {Object} field - 字段对象
+     * @returns {string} - 返回字段类型的中文显示名称
+     */
+    function getFieldTypeDisplayName(field) {
+      if (field.category === 'Calculated_Field' || field.type === 'calculation') {
+        return '计算字段';
+      } else if (field.category === 'Parameters' || field.type === 'parameter') {
+        return '参数';
+      } else {
+        return '默认字段';
+      }
+    }
+
+    /**
+     * 将字段数据导出为 PDF 文件
+     */
     function exportPDF() {
-      if (!processedData) {
-        addLogEntry('错误', '请先上传并处理Tableau文件');
+      if (!processedData || !processedData.fields || processedData.fields.length === 0) {
+        addLogEntry('错误', '没有可导出的数据。请先上传并处理 Tableau 文件');
         return;
       }
 
       try {
-        addLogEntry('信息', '正在创建PDF报告...');
+        addLogEntry('信息', '正在创建 PDF 报告...');
 
+        // 创建 jsPDF 实例
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({
-          orientation: 'landscape',
-          unit: 'pt',
-          format: 'a4'
+          orientation: 'landscape', // 横向打印，以容纳更多列
+          unit: 'pt',              // 使用点作为单位
+          format: 'a4'             // A4 纸张大小
         });
 
-        // 表格数据
+        // 准备表格数据
         const data = processedData.fields.map(field => [
-          field.name || '',
-          field.datatype || '',
-          field.type === 'calculation' ? '计算字段' : '默认字段',
-          field.formula || '',
-          field.datasource || ''
+          (field.field_caption || field.name).replace(/[\[\]]/g, ''), // 字段名称，清理方括号
+          field.field_datatype || field.datatype || '',               // 数据类型
+          getFieldTypeDisplayName(field),                             // 字段类型
+          field.field_calculation || field.formula || '',             // 计算公式
+          field.datasource_caption || field.datasource || ''          // 数据源
         ]);
+
+        // 生成文件名
+        const filename = document.getElementById('filename').value || 'tableau_workbook';
+        const pdfFileName = `${filename}_字段分析_${new Date().toISOString().slice(0, 10)}.pdf`;
 
         // 添加标题
         doc.setFontSize(16);
-        doc.text('Tableau Fields Export', 40, 40);
+        doc.text(`Tableau 字段分析: ${filename}`, 40, 40);
+
+        // 添加统计信息
+        doc.setFontSize(10);
+        const calcCount = processedData.fields.filter(f => f.category === 'Calculated_Field' || f.type === 'calculation').length;
+        const paramCount = processedData.fields.filter(f => f.category === 'Parameters' || f.type === 'parameter').length;
+        const defaultCount = processedData.fields.filter(f => f.category === 'Default_Field' || (f.type !== 'calculation' && f.type !== 'parameter')).length;
+        doc.text(`共 ${processedData.fields.length} 个字段（${calcCount} 个计算字段，${paramCount} 个参数，${defaultCount} 个默认字段）`, 40, 60);
 
         // 创建表格
         doc.autoTable({
           head: [['字段名称', '数据类型', '字段类型', '计算公式', '数据源']],
           body: data,
-          startY: 60,
+          startY: 80, // 表格起始位置，留出空间给标题和统计信息
           theme: 'grid',
           styles: {
-            fontSize: 8,
-            cellPadding: 2
+            fontSize: 8,     // 小字体以容纳更多内容
+            cellPadding: 2,  // 单元格内边距
+            overflow: 'linebreak' // 文本过长时自动换行
           },
           columnStyles: {
-            0: { cellWidth: 80 },
-            1: { cellWidth: 60 },
-            2: { cellWidth: 60 },
-            3: { cellWidth: 250 },
-            4: { cellWidth: 80 }
+            0: { cellWidth: 80 },  // 字段名称
+            1: { cellWidth: 60 },  // 数据类型
+            2: { cellWidth: 60 },  // 字段类型
+            3: { cellWidth: 250 }, // 计算公式 (给足宽度)
+            4: { cellWidth: 80 }   // 数据源
+          },
+          didDrawPage: function(data) {
+            // 添加页脚
+            doc.setFontSize(8);
+            doc.text(`生成日期: ${new Date().toLocaleDateString()}`, 40, doc.internal.pageSize.height - 20);
+            doc.text(`页码: ${doc.internal.getNumberOfPages()}`, doc.internal.pageSize.width - 100, doc.internal.pageSize.height - 20);
           }
         });
 
-        // 保存PDF
-        doc.save(`tableau_fields_${new Date().getTime()}.pdf`);
+        // 保存 PDF
+        doc.save(pdfFileName);
 
-        addLogEntry('成功', 'PDF文件导出成功');
+        addLogEntry('成功', `PDF 文件 '${pdfFileName}' 已生成。`);
       } catch (error) {
-        console.error('生成PDF时出错:', error);
-        addLogEntry('错误', '生成PDF失败: ' + error.message);
+        console.error('生成 PDF 时出错:', error);
+        addLogEntry('错误', '生成 PDF 失败: ' + error.message);
       }
     }
 
 
 
-    // 导出JSON
+    /**
+     * 将字段数据导出为 JSON 文件
+     */
     function exportJSON() {
-      if (!processedData) {
-        addLogEntry('错误', '请先上传并处理Tableau文件');
+      if (!processedData || !processedData.fields || processedData.fields.length === 0) {
+        addLogEntry('错误', '没有可导出的数据。请先上传并处理 Tableau 文件');
         return;
       }
 
       try {
-        addLogEntry('信息', '正在创建JSON文件...');
+        addLogEntry('信息', '正在创建 JSON 文件...');
 
-        // 创建JSON内容
-        const jsonContent = JSON.stringify(processedData, null, 2);
+        // 准备导出数据
+        const exportData = {
+          metadata: {
+            exportDate: new Date().toISOString(),
+            filename: document.getElementById('filename').value || 'tableau_workbook',
+            totalFields: processedData.fields.length,
+            calculatedFields: processedData.fields.filter(f => f.category === 'Calculated_Field' || f.type === 'calculation').length,
+            parameters: processedData.fields.filter(f => f.category === 'Parameters' || f.type === 'parameter').length,
+            defaultFields: processedData.fields.filter(f => f.category === 'Default_Field' || (f.type !== 'calculation' && f.type !== 'parameter')).length,
+            relationships: processedData.relationships.length
+          },
+          fields: processedData.fields,
+          relationships: processedData.relationships
+        };
 
-        // 创建Blob并下载
+        // 创建 JSON 内容，使用缩进使其更易读
+        const jsonContent = JSON.stringify(exportData, null, 2);
+
+        // 生成文件名
+        const filename = document.getElementById('filename').value || 'tableau_workbook';
+        const jsonFileName = `${filename}_字段分析_${new Date().toISOString().slice(0, 10)}.json`;
+
+        // 创建 Blob 并下载
         const blob = new Blob([jsonContent], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
 
         const link = document.createElement('a');
         link.setAttribute('href', url);
-        link.setAttribute('download', `tableau_relationships_${new Date().getTime()}.json`);
+        link.setAttribute('download', jsonFileName);
         link.style.visibility = 'hidden';
 
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url); // 释放 URL 对象
 
-        addLogEntry('成功', 'JSON文件导出成功');
+        addLogEntry('成功', `JSON 文件 '${jsonFileName}' 已生成。`);
       } catch (error) {
-        console.error('生成JSON时出错:', error);
-        addLogEntry('错误', '生成JSON失败: ' + error.message);
+        console.error('生成 JSON 时出错:', error);
+        addLogEntry('错误', '生成 JSON 失败: ' + error.message);
       }
     }
   </script>
