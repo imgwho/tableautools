@@ -261,8 +261,8 @@
     .mermaid-container {
       background: var(--bg);
       border-radius: 8px;
-      padding: 2rem;
-      height: 500px;
+      padding: 1rem;
+      min-height: 600px;
       width: 100%;
       display: flex;
       align-items: center;
@@ -274,6 +274,7 @@
     #mermaidDiv {
       width: 100%;
       height: 100%;
+      min-height: 580px;
     }
 
     table {
@@ -328,16 +329,7 @@
       border-radius: 4px;
     }
 
-    .mermaid-container {
-      background: var(--bg);
-      border-radius: 8px;
-      padding: 2rem;
-      height: 500px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid var(--border);
-    }
+
 
     .file-list {
       list-style: none;
@@ -642,6 +634,34 @@
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
           </svg>
           依赖关系图
+          <div style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;">
+            <button id="zoomInBtn" class="btn btn-sm" style="padding: 0.25rem 0.5rem;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                <line x1="11" y1="8" x2="11" y2="14"></line>
+                <line x1="8" y1="11" x2="14" y2="11"></line>
+              </svg>
+              放大
+            </button>
+            <button id="zoomOutBtn" class="btn btn-sm" style="padding: 0.25rem 0.5rem;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                <line x1="8" y1="11" x2="14" y2="11"></line>
+              </svg>
+              缩小
+            </button>
+            <button id="resetZoomBtn" class="btn btn-sm" style="padding: 0.25rem 0.5rem;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 2v6h6"></path>
+                <path d="M21 12A9 9 0 0 0 6 5.3L3 8"></path>
+                <path d="M21 22v-6h-6"></path>
+                <path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"></path>
+              </svg>
+              重置
+            </button>
+          </div>
         </h2>
         <div class="mermaid-container" id="mermaidContainer">
           <!-- 这里将显示Mermaid图表 -->
@@ -1050,9 +1070,9 @@
         const safeId = `n${field.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
         code += `    ${safeId}["${field.name}"]\n`;
         if (field.type === 'calculation') {
-          code += `    style ${safeId} fill:#f9f9f9,stroke:#333\n`;
+          code += `    style ${safeId} fill:#f9f9f9,stroke:#333,stroke-width:2px\n`;
         } else {
-          code += `    style ${safeId} fill:#e1f5fe,stroke:#0288d1\n`;
+          code += `    style ${safeId} fill:#e1f5fe,stroke:#0288d1,stroke-width:1.5px\n`;
         }
       });
 
@@ -1081,7 +1101,10 @@
           securityLevel: 'loose',
           flowchart: {
             useMaxWidth: false,
-            htmlLabels: true
+            htmlLabels: true,
+            curve: 'basis',
+            nodeSpacing: 60,
+            rankSpacing: 80
           }
         });
 
@@ -1094,11 +1117,48 @@
           svgElement.style.width = '100%';
           svgElement.style.height = '100%';
           svgElement.style.maxWidth = 'none';
+
+          // 初始缩放比例
+          window.currentZoom = 1;
+
+          // 添加缩放按钮事件
+          document.getElementById('zoomInBtn').addEventListener('click', () => {
+            window.currentZoom += 0.2;
+            applyZoom(svgElement, window.currentZoom);
+          });
+
+          document.getElementById('zoomOutBtn').addEventListener('click', () => {
+            if (window.currentZoom > 0.3) {
+              window.currentZoom -= 0.2;
+              applyZoom(svgElement, window.currentZoom);
+            }
+          });
+
+          document.getElementById('resetZoomBtn').addEventListener('click', () => {
+            window.currentZoom = 1;
+            applyZoom(svgElement, window.currentZoom);
+          });
         }
       } catch (renderError) {
         console.error('渲染图表时出错:', renderError);
         addLogEntry('错误', '图表渲染失败: ' + renderError.message);
         throw new Error('图表渲染失败: ' + renderError.message);
+      }
+    }
+
+    // 应用缩放
+    function applyZoom(svgElement, zoomLevel) {
+      const container = document.getElementById('mermaidContainer');
+      const g = svgElement.querySelector('g');
+      if (g) {
+        g.style.transform = `scale(${zoomLevel})`;
+        g.style.transformOrigin = 'center center';
+
+        // 调整容器滚动位置到中心
+        const svgWidth = svgElement.getBoundingClientRect().width;
+        const svgHeight = svgElement.getBoundingClientRect().height;
+        container.scrollLeft = (svgWidth * zoomLevel - svgWidth) / 2;
+        container.scrollTop = (svgHeight * zoomLevel - svgHeight) / 2;
       }
     }
 
