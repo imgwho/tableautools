@@ -1350,7 +1350,21 @@
       const links = new Set(); // 使用 Set 存储连接关系，自动去重 "A --> B"
 
       // 遍历所有关系，添加到连接集合
-      data.relationships.forEach(rel => {
+      // 限制关系数量，避免图表过于复杂
+      const MAX_RELATIONSHIPS = 1800; // 设置最大关系数量
+      const relationshipsToProcess = data.relationships.length > MAX_RELATIONSHIPS ?
+                                     data.relationships.slice(0, MAX_RELATIONSHIPS) :
+                                     data.relationships;
+
+      if (data.relationships.length > MAX_RELATIONSHIPS) {
+        console.warn(`关系数量超过限制 (${data.relationships.length} > ${MAX_RELATIONSHIPS})，只显示前 ${MAX_RELATIONSHIPS} 个关系`);
+        // 检查 addLogEntry 函数是否存在
+        if (typeof addLogEntry === 'function') {
+          addLogEntry('警告', `关系数量过多 (${data.relationships.length})，为保证性能只显示前 ${MAX_RELATIONSHIPS} 个关系`);
+        }
+      }
+
+      relationshipsToProcess.forEach(rel => {
         const fromId = fieldNameToMermaidIdMap.get(rel.from);
         const toId = fieldNameToMermaidIdMap.get(rel.to);
         if (fromId && toId) {
@@ -1452,6 +1466,8 @@
           startOnLoad: false,
           theme: 'default',
           securityLevel: 'loose',
+          maxTextSize: 100000,
+          maxEdges: 2000, // 增加边的数量限制，允许更复杂的图表
           flowchart: {
             useMaxWidth: false,
             htmlLabels: true,
