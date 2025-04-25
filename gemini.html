@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tableau 计算导出器 (HTML/JS版)</title>
+
+  <!-- CSS 样式 -->
+  <style>
+    /* --- 通用样式 --- */
+    body {
+      font-family: sans-serif;
+      /* 使用无衬线字体 */
+      line-height: 1.6;
+      /* 设置行高 */
+      margin: 20px;
+      /* 页面外边距 */
+      background-color: #f4f4f4;
+      /* 页面背景色 */
+    }
+
+    /* --- 容器样式 --- */
+    .container {
+      background: #fff;
+      /* 白色背景 */
+      padding: 20px;
+      /* 内边距 */
+      border-radius: 5px;
+      /* 圆角边框 */
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      /* 轻微阴影 */
+      margin-bottom: 20px;
+      /* 底部外边距 */
+      display: flex;
+      /* 使用 Flexbox 布局 */
+      align-items: center;
+      /* 垂直居中对齐 */
+      gap: 15px;
+      /* Flex 项目之间的间距 */
+    }
+
+    /* --- 标签样式 --- */
+    label {
+      font-weight: bold;
+      /* 加粗字体 */
+    }
+
+    /* --- 文件输入框样式 --- */
+    input[type="file"] {
+      border: 1px solid #ccc;
+      /* 灰色边框 */
+      padding: 5px;
+      /* 内边距 */
+      border-radius: 3px;
+      /* 轻微圆角 */
+    }
+
+    /* --- 按钮样式 --- */
+    button {
+      padding: 10px 15px;
+      /* 内边距 */
+      background-color: #007bff;
+      /* 蓝色背景 */
+      color: white;
+      /* 白色文字 */
+      border: none;
+      /* 无边框 */
+      border-radius: 4px;
+      /* 圆角 */
+      cursor: pointer;
+      /* 鼠标指针为手形 */
+      transition: background-color 0.2s ease;
+      /* 背景色过渡效果 */
+    }
+
+    button:hover {
+      background-color: #0056b3;
+      /* 鼠标悬停时深蓝色 */
+    }
+
+    button:disabled {
+      background-color: #cccccc;
+      /* 禁用时灰色 */
+      cursor: not-allowed;
+      /* 禁用时鼠标指针 */
+    }
+
+    /* --- 状态信息区域样式 --- */
+    #status {
+      margin-top: 15px;
+      /* 顶部外边距 */
+      font-weight: bold;
+      /* 加粗字体 */
+      min-height: 20px;
+      /* 最小高度，防止布局跳动 */
+    }
+
+    /* --- 结果区域样式 --- */
+    #results {
+      background: #fff;
+      /* 白色背景 */
+      padding: 20px;
+      /* 内边距 */
+      border-radius: 5px;
+      /* 圆角 */
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      /* 阴影 */
+      margin-top: 20px;
+      /* 顶部外边距 */
+    }
+
+    /* --- 表格容器样式 --- */
+    #tableContainer {
+      margin-top: 15px;
+      /* 顶部外边距 */
+      max-height: 400px;
+      /* 最大高度 */
+      overflow-y: auto;
+      /* 内容超出时显示垂直滚动条 */
+      border: 1px solid #ccc;
+      /* 灰色边框 */
+    }
+
+    /* --- 表格样式 --- */
+    table {
+      width: 100%;
+      /* 宽度占满容器 */
+      border-collapse: collapse;
+      /* 合并边框 */
+    }
+
+    th,
+    td {
+      border: 1px solid #ddd;
+      /* 单元格边框 */
+      padding: 8px;
+      /* 内边距 */
+      text-align: left;
+      /* 左对齐 */
+      vertical-align: top;
+      /* 垂直顶部对齐 */
+      word-wrap: break-word;
+      /* 长单词或URL换行 */
+    }
+
+    th {
+      background-color: #f2f2f2;
+      /* 表头背景色 */
+      position: sticky;
+      /* 粘性定位，使其在滚动时固定 */
+      top: 0;
+      /* 固定在容器顶部 */
+      z-index: 1;
+      /* 确保表头在内容之上 */
+    }
+
+    /* --- Mermaid 图表容器样式 --- */
+    #mermaidContainer {
+      margin-top: 20px;
+      /* 顶部外边距 */
+      border: 1px solid #ccc;
+      /* 灰色边框 */
+      padding: 10px;
+      /* 内边距 */
+      background-color: #fdfdfd;
+      /* 近白色背景 */
+      overflow: auto;
+      /* 内容超出时显示滚动条 */
+    }
+
+    /* --- 图例容器样式 --- */
+    #legendContainer {
+      margin-top: 15px;
+      /* 顶部外边距 */
+      padding: 10px;
+      /* 内边距 */
+      border: 1px dashed #ccc;
+      /* 灰色虚线边框 */
+      background-color: #f9f9f9;
+      /* 浅灰色背景 */
+      font-size: 0.9em;
+      /* 稍小字体 */
+    }
+
+    #legendContainer ul {
+      list-style-type: none;
+      /* 去掉列表项标记 */
+      padding: 0;
+      /* 去掉内边距 */
+      margin: 0;
+      /* 去掉外边距 */
+    }
+
+    #legendContainer li {
+      margin-bottom: 5px;
+      /* 列表项底部外边距 */
+    }
+
+    /* 节点ID样式 */
+    #legendContainer .node-id {
+      font-weight: bold;
+      /* 加粗 */
+      display: inline-block;
+      /* 行内块元素 */
+      min-width: 45px;
+      /* 最小宽度，用于对齐 */
+      margin-right: 5px;
+      /* 右边距 */
+      text-align: right;
+      /* 右对齐 */
+    }
+
+    /* 节点名称样式 */
+    #legendContainer .node-name {
+      font-style: italic;
+      /* 斜体 */
+    }
+
+    /* 默认字段的特殊样式（颜色与Mermaid图对应）*/
+    #legendContainer .default-field-legend {
+      color: #96599e;
+      /* 紫色，对应Mermaid的foo类填充色 */
+    }
+
+    /* --- Mermaid 节点样式 --- */
+    /* 为 Mermaid 中定义的 'foo' 类节点（默认字段）设置样式 */
+    .mermaid .foo>rect,
+    /* SVG矩形 */
+    .mermaid .foo>polygon
+
+    /* SVG多边形 (可能用于其他形状) */
+      {
+      fill: #f9f !important;
+      /* 填充色 (粉紫色)，!important确保覆盖默认 */
+      stroke: #333 !important;
+      /* 边框颜色 (深灰色) */
+      stroke-width: 1px !important;
+      /* 边框宽度 */
+    }
+
+    /* 为 Mermaid 中计算字段/参数设置默认样式 (如果需要区分) */
+    .mermaid .calculated-field>rect,
+    .mermaid .calculated-field>polygon {
+      fill: #add8e6 !important;
+      /* 浅蓝色 */
+      stroke: #333 !important;
+      stroke-width: 1px !important;
+    }
+  </style>
+
+  <!-- 引入第三方库 -->
+  <!-- JSZip 用于处理 .twbx (zip) 文件 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- SheetJS (xlsx) 用于生成 Excel 文件 -->
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <!-- Mermaid.js 用于渲染图表 -->
+  <script type="module">
+    // 显式导入 Mermaid (使用 ESM)
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    // 可选: 如果 Mermaid 没有自动初始化，可以在这里调用 mermaid.initialize({ startOnLoad: true });
+    // 但通常 <pre class="mermaid"> 会自动触发
+  </script>
+</head>
+
+<body>
+  <!-- 页面主标题 -->
+  <h1>Tableau 计算导出器 (HTML/JS版)</h1>
+
+  <!-- 文件选择和处理按钮区域 -->
+  <div class="container">
+    <label for="twbFileInput">选择一个 .twb 或 .twbx 文件:</label>
+    <input type="file" id="twbFileInput" accept=".twb,.twbx"> <!-- 文件选择框，限制只能选 twb/twbx -->
+    <button id="processButton">处理文件</button> <!-- 处理按钮 -->
+  </div>
+
+  <!-- 状态信息显示区域 -->
+  <div id="status"></div>
+
+  <!-- 结果显示区域 (默认隐藏) -->
+  <div id="results" style="display: none;">
+    <!-- 提取字段部分 -->
+    <h2>提取的字段</h2>
+    <button id="exportExcelButton">导出到 Excel</button> <!-- Excel导出按钮 -->
+    <div id="tableContainer">
+      <!-- 表格将由 JavaScript 在此生成 -->
+    </div>
+
+    <!-- 计算依赖图部分 -->
+    <h2>计算依赖关系图</h2>
+    <!-- 图例容器 -->
+    <div id="legendContainer">
+      <!-- 图例将由 JavaScript 在此生成 -->
+    </div>
+    <!-- Mermaid 图表容器 -->
+    <div id="mermaidContainer">
+      <!-- Mermaid.js 会查找 class="mermaid" 的元素来渲染 -->
+      <pre class="mermaid">
+                %% 图表代码将由 JavaScript 插入这里
+            </pre>
+    </div>
+  </div>
+
+  <!-- JavaScript 代码 -->
+  <script>
+    // --- 全局变量 ---
+    let workbookData = null; // 用于存储处理后的工作簿数据
+    let filenameBase = "tableau_export"; // 导出文件的默认基础名称
+
+    // --- DOM 元素引用 ---
+    const fileInput = document.getElementById('twbFileInput'); // 文件输入框
+    const processButton = document.getElementById('processButton'); // 处理按钮
+    const statusDiv = document.getElementById('status'); // 状态显示 div
+    const resultsDiv = document.getElementById('results'); // 结果显示 div
+    const tableContainer = document.getElementById('tableContainer'); // 表格容器 div
+    const mermaidContainer = document.getElementById('mermaidContainer'); // Mermaid 图容器 div
+    const legendContainer = document.getElementById('legendContainer'); // 图例容器 div
+    const exportExcelButton = document.getElementById('exportExcelButton'); // Excel 导出按钮
+
+    // --- 事件监听 ---
+    processButton.addEventListener('click', handleFileProcessing); // 监听处理按钮点击事件
+    exportExcelButton.addEventListener('click', exportToExcel); // 监听 Excel 导出按钮点击事件
+
+    // --- UI 更新函数 ---
+
+    /**
+     * 设置状态信息
+     * @param {string} message - 要显示的消息
+     * @param {boolean} isError - 是否是错误消息 (用于设置颜色)
+     */
+    function setStatus(message, isError = false) {
+      statusDiv.textContent = message; // 更新状态文本
+      statusDiv.style.color = isError ? 'red' : 'green'; // 根据是否错误设置颜色
+      console.log(message); // 同时在控制台输出消息，方便调试
+    }
+
+    /**
+     * 设置加载状态，控制按钮可用性和清空旧结果
+     * @param {boolean} isLoading - 是否正在加载
+     */
+    function setLoading(isLoading) {
+      processButton.disabled = isLoading; // 加载时禁用处理按钮
+      statusDiv.textContent = isLoading ? '正在处理，请稍候...' : ''; // 显示加载提示或清空
+      if (isLoading) {
+        resultsDiv.style.display = 'none'; // 加载时隐藏结果区域
+        tableContainer.innerHTML = '';    // 清空之前的表格
+        // 清空 Mermaid 图内容，使用 `textContent` 而不是 `innerHTML` 以处理 `<pre>`
+        const mermaidDiv = mermaidContainer.querySelector('.mermaid');
+        if (mermaidDiv) mermaidDiv.textContent = '%% 清空中...';
+        legendContainer.innerHTML = ''; // 清空图例
+      }
+    }
+
+    // --- 核心处理逻辑 ---
+
+    /**
+     * 处理文件选择和启动处理流程
+     */
+    async function handleFileProcessing() {
+      const file = fileInput.files[0]; // 获取用户选择的第一个文件
+      if (!file) {
+        setStatus('请先选择一个文件。', true); // 文件未选择则提示错误
+        return;
+      }
+
+      setLoading(true); // 进入加载状态
+      // 从文件名生成导出文件的基础名 (去除扩展名, 最多取30个字符)
+      filenameBase = file.name.replace(/\.(twb|twbx)$/i, '').substring(0, 30);
+
+      try {
+        let xmlContent; // 用于存储 TWB 文件的 XML 内容
+        // 根据文件扩展名判断文件类型
+        if (file.name.toLowerCase().endsWith('.twbx')) {
+          setStatus('正在读取 .twbx 文件...');
+          xmlContent = await readTwbx(file); // 调用函数读取 .twbx
+        } else if (file.name.toLowerCase().endsWith('.twb')) {
+          setStatus('正在读取 .twb 文件...');
+          xmlContent = await readFileContent(file); // 调用函数读取 .twb
+        } else {
+          // 不支持的文件类型
+          throw new Error('不支持的文件类型。请选择 .twb 或 .twbx 文件。');
+        }
+
+        // 确保成功获取到 XML 内容
+        if (!xmlContent) {
+          throw new Error('无法从文件中提取 TWB 内容。文件可能已损坏或为空。');
+        }
+
+        setStatus('正在解析 Tableau 工作簿 (XML)...');
+        const parser = new DOMParser(); // 创建 XML 解析器
+        const xmlDoc = parser.parseFromString(xmlContent, "text/xml"); // 解析 XML 字符串
+
+        // 检查 XML 解析错误
+        const parseError = xmlDoc.getElementsByTagName("parsererror"); // 查找解析错误标签
+        if (parseError.length > 0) {
+          // 如果存在解析错误，则抛出错误信息
+          console.error("XML 解析错误:", parseError[0].textContent);
+          throw new Error(`解析 TWB XML 时出错。文件可能已损坏或不是有效的 Tableau 文件。详细信息: ${parseError[0].textContent.substring(0, 200)}...`);
+        }
+
+        setStatus('正在提取数据...');
+        // 调用函数从解析后的 XML 文档中提取字段和计算信息
+        workbookData = extractDataFromTwb(xmlDoc);
+
+        setStatus('正在处理数据并生成输出...');
+        displayTable(workbookData.fields); // 显示提取的字段表格
+        // !! 注意: generateAndDisplayMermaid 现在是 async, 但 handleFileProcessing 也是 async,
+        // !! 所以可以直接调用，如果需要等待它完成再做别的事，可以使用 await
+        await generateAndDisplayMermaid(workbookData.fields, workbookData.calcs); // 生成并显示 Mermaid 图
+
+        resultsDiv.style.display = 'block'; // 显示结果区域
+        setStatus(`文件 '${file.name}' 处理完成。`, false); // 显示成功消息
+
+      } catch (error) {
+        // 捕获处理过程中的任何错误
+        setStatus(`错误: ${error.message}`, true); // 显示错误信息
+        console.error(error); // 在控制台输出详细错误
+        resultsDiv.style.display = 'none'; // 隐藏可能不完整的结果
+      } finally {
+        // 无论成功或失败，最终都结束加载状态
+        setLoading(false);
+      }
+    }
+
+    /**
+     * 读取 .twb 文件内容 (纯文本)
+     * @param {File} file - 文件对象
+     * @returns {Promise<string>} - 返回包含文件内容的 Promise
+     */
+    function readFileContent(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader(); // 创建 FileReader 对象
+        reader.onload = (event) => resolve(event.target.result); // 读取成功时 resolve 内容
+        reader.onerror = (error) => reject(error); // 读取失败时 reject 错误
+        reader.readAsText(file); // 以文本格式读取文件
+      });
+    }
+
+    /**
+     * 读取 .twbx 文件内容 (解压并获取 .twb)
+     * @param {File} file - 文件对象
+     * @returns {Promise<string>} - 返回包含 .twb 文件内容的 Promise
+     */
+    async function readTwbx(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader(); // 创建 FileReader 对象
+        reader.onload = async (event) => {
+          try {
+            // 使用 JSZip 加载 ArrayBuffer 数据
+            const zip = await JSZip.loadAsync(event.target.result);
+            let twbFileEntry = null;
+            // 遍历 zip 包中的所有文件/目录
+            zip.forEach((relativePath, zipEntry) => {
+              // 查找以 .twb 结尾且不是目录的文件 (忽略大小写)
+              if (relativePath.toLowerCase().endsWith('.twb') && !zipEntry.dir) {
+                twbFileEntry = zipEntry; // 找到 .twb 文件
+              }
+            });
+
+            if (twbFileEntry) {
+              // 如果找到 .twb 文件，异步读取其内容为字符串
+              const content = await twbFileEntry.async("string");
+              resolve(content); // resolve 文件内容
+            } else {
+              // 如果未找到 .twb 文件，reject 错误
+              reject(new Error('在 .twbx 压缩包中未找到 .twb 文件。'));
+            }
+          } catch (error) {
+            // 处理 JSZip 加载或读取过程中的错误
+            reject(new Error(`读取 .twbx 文件时出错: ${error.message}`));
+          }
+        };
+        reader.onerror = (error) => reject(error); // 处理 FileReader 本身的错误
+        reader.readAsArrayBuffer(file); // 以 ArrayBuffer 格式读取文件，因为 JSZip 需要这个格式
+      });
+    }
+
+    /**
+     * 从解析后的 TWB XML 文档中提取字段和计算信息
+     * @param {XMLDocument} xmlDoc - 解析后的 XML 文档对象
+     * @returns {object} - 返回包含字段列表和计算列表的对象 { fields: [], calcs: [] }
+     */
+    function extractDataFromTwb(xmlDoc) {
+      const allFields = []; // 用于存储所有提取的字段信息
+      let counter = 0; // 简单的计数器，用于生成唯一标识或排序
+
+      const datasources = xmlDoc.getElementsByTagName('datasource'); // 获取所有的 <datasource> 元素
+
+      // 遍历每个数据源
+      for (const ds of datasources) {
+        // 获取数据源名称和标题 (优先使用标题 caption, 否则用 name)
+        const dsName = ds.getAttribute('name') || 'Unknown Datasource'; // 数据源内部名称
+        const dsCaption = ds.getAttribute('caption') || dsName; // 数据源显示名称
+        const isParameterDs = dsName.toLowerCase() === 'parameters'; // 判断是否是参数数据源
+
+        // 获取数据源下的所有 <column> 元素
+        const columns = ds.getElementsByTagName('column');
+        for (const col of columns) {
+          // 获取字段的各种属性
+          const fieldId = col.getAttribute('id') || `[${col.getAttribute('name') || `col_${counter}`}]`; // 字段ID (可能需要生成)
+          const fieldName = col.getAttribute('name') || fieldId; // 字段名
+          const fieldCaption = col.getAttribute('caption') || fieldName; // 字段标题 (显示用)
+
+          // 查找字段下的 <calculation> 元素
+          const calculationTag = col.getElementsByTagName('calculation')[0];
+          const fieldCalculation = calculationTag ? calculationTag.getAttribute('formula') : null; // 获取计算公式
+
+          // 查找字段描述
+          const descTag = col.getElementsByTagName('desc')[0]; // 查找 <desc> 标签
+          // 描述通常在 <formatted-text><run>...</run></formatted-text> 结构里
+          const descriptionElement = descTag ? descTag.getElementsByTagName('formatted-text')[0]?.getElementsByTagName('run')[0] : null;
+          const fieldDesc = descriptionElement ? descriptionElement.textContent : null; // 获取描述文本
+
+          // 构建字段数据对象
+          const fieldData = {
+            counter: counter++, // 计数器
+            datasource_name: dsName, // 数据源内部名
+            datasource_caption: dsCaption, // 数据源显示名
+            alias: col.getAttribute('alias'), // 别名
+            field_calculation: fieldCalculation, // 计算公式 (后面可能会被友好名称替换)
+            field_calculation_bk: fieldCalculation, // 备份原始计算公式，用于依赖分析
+            field_caption: fieldCaption, // 字段显示名
+            field_datatype: col.getAttribute('datatype'), // 数据类型 (string, integer, etc.)
+            field_def_agg: col.getAttribute('default-aggregation'), // 默认聚合方式 (sum, avg, etc.)
+            field_desc: fieldDesc, // 字段描述
+            field_hidden: col.getAttribute('hidden') === 'true', // 是否隐藏
+            field_id: fieldId, // 字段ID (通常是 [Name] 格式)
+            // 语义角色 (近似判断，TWB XML 结构可能变化)
+            field_is_nominal: col.getAttribute('semantic-role') === '[Nominal]',
+            field_is_ordinal: col.getAttribute('semantic-role') === '[Ordinal]',
+            field_is_quantitative: col.getAttribute('semantic-role') === '[Measure]',
+            field_name: fieldName, // 字段内部名
+            field_role: col.getAttribute('role'), // 角色 (dimension, measure)
+            field_type: col.getAttribute('type'), // 类型 (quantitative, ordinal, nominal)
+            // field_worksheets: TBD - 提取工作表使用情况比较复杂，暂不实现
+          };
+
+          // 初步分类字段类型 (后续会精炼)
+          if (isParameterDs || (col.parentElement && col.parentElement.nodeName === 'datasource' && col.parentElement.getAttribute('name')?.toLowerCase() === 'parameters')) {
+            // 如果字段属于 'Parameters' 数据源，则分类为参数
+            fieldData.category = 'Parameters';
+          } else if (fieldCalculation !== null) {
+            // 如果有计算公式，则分类为计算字段
+            fieldData.category = 'Calculated_Field';
+          } else {
+            // 否则为默认字段
+            fieldData.category = 'Default_Field';
+          }
+
+          allFields.push(fieldData); // 将字段数据添加到列表
+        }
+
+        // 特殊处理 <datasource name='Parameters'> 下直接列出的 <param> 元素
+        if (isParameterDs) {
+          const parameters = ds.getElementsByTagName('param'); // 查找 <param> 标签 (标签名可能需确认)
+          for (const param of parameters) {
+            const fieldId = `[${param.getAttribute('name')}]`; // 参数的 ID 通常是 [ParamName]
+            // 检查是否已通过 <column> 添加过 (不太可能，但以防万一)
+            if (!allFields.some(f => f.field_id === fieldId && f.datasource_name === 'Parameters')) {
+              // 如果未添加，则构建参数的字段数据并添加
+              allFields.push({
+                counter: counter++,
+                datasource_name: dsName,
+                datasource_caption: dsCaption,
+                alias: param.getAttribute('alias'),
+                field_calculation: null, // 参数通常没有计算公式
+                field_calculation_bk: null,
+                field_caption: param.getAttribute('caption') || param.getAttribute('name'), // 显示名
+                field_datatype: param.getAttribute('datatype'), // 数据类型
+                field_desc: null, // 参数一般没有 <desc>
+                field_hidden: false, // 参数通常不隐藏
+                field_id: fieldId, // ID
+                field_name: param.getAttribute('name'), // 内部名
+                field_role: 'parameter', // 角色
+                field_type: 'quantitative', // 类型 (通常，取决于参数定义)
+                category: 'Parameters' // 分类为参数
+              });
+            }
+          }
+        }
+      }
+
+      // --- 数据后处理 ---
+
+      // 1. 创建字段 ID -> 友好名称 [FieldName] 的映射，用于替换计算公式中的 ID
+      const calcMapRaw = new Map(); // key: 原始ID (无括号), value: 友好名称 [FieldName]
+      allFields.forEach(field => {
+        // 包含计算字段、参数和默认字段，因为它们都可能在其他计算中被引用
+        const cleanId = field.field_id.replace(/[\[\]]/g, ''); // 移除 ID 中的方括号
+        const friendlyName = `[${field.field_caption || field.field_name}]`; // 使用 Caption 或 Name 作为友好名称
+        // 优先使用计算字段/参数的名称，避免被同名默认字段覆盖
+        if (field.category === 'Calculated_Field' || field.category === 'Parameters') {
+          calcMapRaw.set(cleanId, friendlyName);
+        } else if (!calcMapRaw.has(cleanId)) { // 如果不是计算/参数，且该 cleanId 还未被映射，则添加默认字段的映射
+          calcMapRaw.set(cleanId, friendlyName);
+        }
+      });
+
+
+      // 2. 替换计算公式中的字段 ID 为友好名称 (对 `field_calculation` 进行修改)
+      allFields.forEach(field => {
+        if (field.field_calculation) { // 只处理有计算公式的字段
+          let formula = field.field_calculation;
+          // 获取所有映射的 key (原始ID，无括号)，按长度降序排序
+          // 排序是为了优先替换长名称，避免如 [Sales] 错误替换 [Sales Amount] 的一部分
+          const sortedKeys = Array.from(calcMapRaw.keys()).sort((a, b) => b.length - a.length);
+
+          sortedKeys.forEach(keyId => {
+            // 使用正则表达式精确替换 `[原始ID]` 为对应的 `[友好名称]`
+            // 需要转义 keyId 中的正则表达式特殊字符
+            const escapedKeyId = keyId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            // 创建正则表达式，匹配方括号包围的、转义后的 keyId，全局替换，忽略大小写 (g, i)
+            const regex = new RegExp(`\\[${escapedKeyId}\\]`, 'gi');
+            const replacement = calcMapRaw.get(keyId); // 获取对应的友好名称
+            if (replacement) {
+              formula = formula.replace(regex, replacement);
+            }
+          });
+          field.field_calculation = formula; // 更新字段对象的计算公式
+        }
+      });
+
+      // 3. 过滤重复字段 (特别是参数可能在多个数据源下出现)
+      // 策略：优先保留来自 'Parameters' 数据源的参数，对于其他字段保留第一次出现的
+      const uniqueFields = []; // 存储去重后的字段
+      const seenFieldIds = new Set(); // 存储已经添加的字段 ID
+
+      // 先按数据源排序，将 'Parameters' 数据源的字段排在前面
+      allFields
+        .sort((a, b) => {
+          if (a.datasource_name === 'Parameters' && b.datasource_name !== 'Parameters') return -1; // a 来自 Parameters，排前面
+          if (a.datasource_name !== 'Parameters' && b.datasource_name === 'Parameters') return 1; // b 来自 Parameters，排前面
+          return a.counter - b.counter; // 其他情况保持原始相对顺序
+        })
+        .forEach(field => {
+          // 如果这个字段的 ID 还没见过，就添加到 uniqueFields 列表，并记录 ID
+          if (!seenFieldIds.has(field.field_id)) {
+            uniqueFields.push(field);
+            seenFieldIds.add(field.field_id);
+          }
+          // (这里的逻辑保证了如果 Parameters 数据源的同 ID 字段先出现，就会被保留)
+        });
+
+
+      // 4. 最终排序，用于表格显示
+      const preferenceOrder = ['Parameters', 'Calculated_Field', 'Default_Field']; // 定义类型优先级
+      uniqueFields.sort((a, b) => {
+        const typeAIndex = preferenceOrder.indexOf(a.category); // 获取 a 的类型优先级
+        const typeBIndex = preferenceOrder.indexOf(b.category); // 获取 b 的类型优先级
+        if (typeAIndex !== typeBIndex) return typeAIndex - typeBIndex; // 按类型优先级排序
+
+        // 类型相同时，按数据源名称排序
+        if (a.datasource_caption < b.datasource_caption) return -1;
+        if (a.datasource_caption > b.datasource_caption) return 1;
+
+        // 数据源名称也相同时，按字段名称排序
+        if (a.field_name < b.field_name) return -1;
+        if (a.field_name > b.field_name) return 1;
+
+        return a.counter - b.counter; // 最后按原始顺序 (counter) 排序
+      });
+
+      // 5. 提取计算字段和参数，用于 Mermaid 图生成
+      const calcsForMermaid = uniqueFields.filter(f => f.category === 'Calculated_Field' || f.category === 'Parameters');
+
+      // 返回处理后的字段列表和用于 Mermaid 的计算/参数列表
+      return { fields: uniqueFields, calcs: calcsForMermaid };
+    }
+
+    /**
+     * 将提取的字段数据显示在 HTML 表格中
+     * @param {Array<object>} fields - 处理后的字段对象数组
+     */
+    function displayTable(fields) {
+      if (!fields || fields.length === 0) {
+        // 如果没有字段数据，显示提示信息
+        tableContainer.innerHTML = '<p>未提取到字段信息，或工作簿为空。</p>';
+        return;
+      }
+
+      // 创建表格元素
+      const table = document.createElement('table');
+      const thead = table.createTHead(); // 创建表头
+      const tbody = table.createTBody(); // 创建表体
+      const headerRow = thead.insertRow(); // 在表头插入一行
+
+      // 定义表头列名 (与 Python 脚本中的 df1 对应)
+      const headers = ['字段名称', '数据类型', '类型', '计算公式', '数据源', '字段 ID'];
+      headers.forEach(text => {
+        const th = document.createElement('th'); // 创建表头单元格
+        th.textContent = text; // 设置文本内容
+        headerRow.appendChild(th); // 添加到表头行
+      });
+
+      // 遍历字段数据，填充表格行
+      fields.forEach(field => {
+        const row = tbody.insertRow(); // 在表体插入一行
+        // 获取用于显示的字段名称 (优先用 Caption, 否则用 Name)，并移除方括号
+        const displayName = (field.field_caption || field.field_name).replace(/[\[\]]/g, '');
+
+        // 按顺序插入单元格并填充数据
+        row.insertCell().textContent = displayName || 'N/A'; // 字段名称
+        row.insertCell().textContent = field.field_datatype || 'N/A'; // 数据类型
+        row.insertCell().textContent = field.category || 'N/A'; // 类型 (我们自己分类的)
+        const calcCell = row.insertCell(); // 计算公式单元格
+        calcCell.textContent = field.field_calculation || ''; // 计算公式 (如果没有则为空字符串)
+        calcCell.style.whiteSpace = 'pre-wrap'; // 保留公式中的空格和换行
+        calcCell.style.fontFamily = 'monospace'; // 使用等宽字体显示公式
+        row.insertCell().textContent = field.datasource_caption || 'N/A'; // 数据源 (显示名称)
+        row.insertCell().textContent = field.field_id || 'N/A'; // 字段 ID
+      });
+
+      tableContainer.innerHTML = ''; // 清空旧表格
+      tableContainer.appendChild(table); // 将新创建的表格添加到容器中
+    }
+
+    /**
+     * 生成 Mermaid 图代码并显示图表和图例
+     * @param {Array<object>} allFields - 所有处理后的字段对象数组
+     * @param {Array<object>} calcsForMermaid - 仅包含计算字段和参数的数组
+     */
+    // ******** 这里是修改点：添加了 async 关键字 ********
+    async function generateAndDisplayMermaid(allFields, calcsForMermaid) {
+      if (!calcsForMermaid || calcsForMermaid.length === 0) {
+        // 如果没有计算或参数，显示提示信息
+        const mermaidDiv = mermaidContainer.querySelector('.mermaid');
+        mermaidDiv.textContent = 'flowchart LR\n  A["未找到计算字段或参数"];'; // 显示一个简单的提示节点
+        legendContainer.innerHTML = '<p>没有可生成的图表。</p>';
+        try {
+          // 尝试运行 mermaid 以渲染提示节点
+          if (typeof mermaid !== 'undefined' && mermaid.run) {
+            // !! 注意: 这里也需要 await，因为 generateAndDisplayMermaid 现在是 async
+            await mermaid.run({ nodes: [mermaidDiv] });
+          }
+        } catch (e) { console.error("Mermaid 渲染错误:", e); }
+        return;
+      }
+
+      // --- Mermaid ID 生成与映射 ---
+      // 生成 Mermaid 节点 ID (AA, AB, ..., BA, BB, ..., AAA, AAB, ...)
+      const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      let collatedAbc = [];
+      // 双字母组合
+      for (let i = 0; i < abc.length; i++) {
+        for (let j = 0; j < abc.length; j++) {
+          collatedAbc.push(abc[i] + abc[j]);
+        }
+      }
+      // 三字母组合 (以备节点过多时使用)
+      for (let i = 0; i < abc.length; i++) {
+        for (let j = 0; j < abc.length; j++) {
+          for (let k = 0; k < abc.length; k++) {
+            collatedAbc.push(abc[i] + abc[j] + abc[k]);
+          }
+        }
+      }
+
+      // 映射: 原始字段 ID -> Mermaid 短 ID
+      const fieldIdToMermaidIdMap = new Map();
+      // 映射: Mermaid 短 ID -> 字段显示名称 [FieldName]
+      const mermaidIdToNameMap = new Map();
+      // 映射: Mermaid 短 ID -> 字段类型 (用于样式和图例)
+      const mermaidIdToCategoryMap = new Map();
+
+      let nodeIndex = 0; // 用于从 collatedAbc 中获取唯一 ID
+
+      // 为所有字段（包括默认、计算、参数）分配 Mermaid ID
+      allFields.forEach(field => {
+        if (nodeIndex < collatedAbc.length) {
+          const mermaidId = collatedAbc[nodeIndex++]; // 获取下一个可用 ID
+          fieldIdToMermaidIdMap.set(field.field_id, mermaidId); // 存储映射关系
+          // 存储 Mermaid ID 到显示名称的映射 (移除名称中的引号以防破坏语法)
+          const displayName = `[${(field.field_caption || field.field_name).replace(/["'`]/g, '')}]`;
+          mermaidIdToNameMap.set(mermaidId, displayName);
+          // 存储 Mermaid ID 到类型的映射
+          mermaidIdToCategoryMap.set(mermaidId, field.category);
+        } else {
+          console.warn("警告: Mermaid ID 不足！部分字段可能无法在图中正确显示。");
+        }
+      });
+
+      // --- 依赖关系分析 ---
+      const links = new Set(); // 使用 Set 存储连接关系，自动去重 "A --> B"
+
+      // 遍历所有计算字段和参数
+      calcsForMermaid.forEach(targetField => {
+        const targetMermaidId = fieldIdToMermaidIdMap.get(targetField.field_id); // 获取目标节点的 Mermaid ID
+        // 如果目标节点没有 ID 或没有原始计算公式，则跳过
+        if (!targetMermaidId || !targetField.field_calculation_bk) return;
+
+        const originalFormula = targetField.field_calculation_bk; // 获取备份的原始公式
+
+        // 遍历所有字段，检查是否是当前目标字段的依赖项 (来源)
+        allFields.forEach(potentialSourceField => {
+          const sourceMermaidId = fieldIdToMermaidIdMap.get(potentialSourceField.field_id); // 获取潜在来源节点的 Mermaid ID
+          // 如果来源节点没有 ID，或者是目标节点自身，则跳过
+          if (!sourceMermaidId || sourceMermaidId === targetMermaidId) return;
+
+          // 检查来源字段的 ID 是否出现在目标字段的原始公式中
+          // 提取来源字段 ID 的核心部分 (去除方括号)
+          let coreIdentifier = potentialSourceField.field_id.startsWith('[') && potentialSourceField.field_id.endsWith(']')
+            ? potentialSourceField.field_id.substring(1, potentialSourceField.field_id.length - 1)
+            : potentialSourceField.field_id;
+
+          // 转义核心标识符中的正则表达式特殊字符
+          const escapedIdentifier = coreIdentifier.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+          // 创建正则表达式，查找公式中形如 `[标识符]` 的部分，忽略大小写
+          // 这个正则假设公式中字段引用都是带方括号的
+          const regex = new RegExp(`\\[${escapedIdentifier}\\]`, 'gi');
+
+          // 如果在原始公式中找到了匹配项
+          if (regex.test(originalFormula)) {
+            // 添加从来源到目标的连接关系
+            links.add(`${sourceMermaidId} --> ${targetMermaidId}`);
+          }
+        });
+      });
+
+      // --- 构建 Mermaid 代码 ---
+      const uniqueNodesInLinks = new Set(); // 存储所有在连接中出现的节点 ID
+      links.forEach(link => {
+        const parts = link.split(' --> ');
+        uniqueNodesInLinks.add(parts[0]); // 添加来源节点
+        uniqueNodesInLinks.add(parts[1]); // 添加目标节点
+      });
+
+      // 将所有计算字段和参数节点也加入，确保即使它们没有连接也会被定义
+      calcsForMermaid.forEach(field => {
+        const mid = fieldIdToMermaidIdMap.get(field.field_id);
+        if (mid) uniqueNodesInLinks.add(mid);
+      });
+      // 可选：如果希望图中显示未被引用的默认字段，也取消注释下面的代码
+      // allFields.forEach(field => {
+      //     if(field.category === 'Default_Field'){
+      //          const mid = fieldIdToMermaidIdMap.get(field.field_id);
+      //          if(mid) uniqueNodesInLinks.add(mid);
+      //     }
+      // });
+
+
+      const nodeDefinitions = []; // 存储节点定义的数组，例如 AA["[节点名]"]:::foo
+      const legendItems = []; // 存储图例信息的数组
+
+      // 遍历所有需要定义的节点
+      uniqueNodesInLinks.forEach(nodeId => {
+        const nodeName = mermaidIdToNameMap.get(nodeId) || nodeId; // 获取节点显示名称
+        const nodeCategory = mermaidIdToCategoryMap.get(nodeId); // 获取节点类型
+
+        let nodeClass = ''; // Mermaid 节点的 CSS 类
+        let legendClass = ''; // 图例条目的 CSS 类
+
+        // 根据节点类型分配样式类
+        if (nodeCategory === 'Default_Field') {
+          nodeClass = ':::foo'; // Mermaid 中应用 .foo 样式 (紫色背景)
+          legendClass = 'default-field-legend'; // 图例中使用特殊颜色
+        } else if (nodeCategory === 'Calculated_Field' || nodeCategory === 'Parameters') {
+          nodeClass = ':::calculated-field'; // 可选：为计算/参数应用特定样式 (浅蓝色)
+          legendClass = ''; // 图例中使用默认颜色
+        }
+        // 添加节点定义到数组
+        nodeDefinitions.push(`${nodeId}["${nodeName}"]${nodeClass}`);
+        // 添加图例信息到数组
+        legendItems.push({ id: nodeId, name: nodeName, cssClass: legendClass });
+      });
+
+      // --- 生成图例 HTML ---
+      // 按节点 ID 字母顺序排序图例
+      legendItems.sort((a, b) => a.id.localeCompare(b.id));
+      let legendHtml = '<strong>图例:</strong><ul>'; // 图例起始标签
+      legendItems.forEach(item => {
+        // 为每个图例项创建列表项
+        legendHtml += `<li><span class="node-id ${item.cssClass}">${item.id}:</span> <span class="node-name">${item.name}</span></li>`;
+      });
+      legendHtml += '</ul>'; // 图例结束标签
+      legendContainer.innerHTML = legendHtml; // 更新图例容器内容
+
+
+      // --- 构建最终 Mermaid 代码字符串 ---
+      const mermaidCode = `flowchart LR\n    %% 样式定义\n    classDef foo fill:#f9f,stroke:#333,stroke-width:1px\n    classDef calculated-field fill:#add8e6,stroke:#333,stroke-width:1px\n\n    %% 节点定义\n    ${nodeDefinitions.join('\n    ')}\n\n    %% 连接关系\n    ${Array.from(links).join('\n    ')}`;
+
+      // --- 显示 Mermaid 图 ---
+      const mermaidDiv = mermaidContainer.querySelector('.mermaid');
+      mermaidDiv.textContent = mermaidCode; // 将 Mermaid 代码放入 <pre> 标签
+      mermaidDiv.removeAttribute('data-processed'); // 移除 Mermaid 的处理标记，确保重新渲染
+
+      // 确保 Mermaid 库已加载并调用渲染 API
+      if (typeof mermaid !== 'undefined' && mermaid.run) {
+        try {
+          // 调用 mermaid.run() 来渲染指定的节点
+          // ******** 这里是修改点：保留了 await，因为函数已是 async ********
+          await mermaid.run({ nodes: [mermaidDiv] });
+          console.log("Mermaid 图表已渲染。");
+        } catch (e) {
+          console.error("Mermaid 渲染错误:", e);
+          // 在 <pre> 标签中显示错误信息和原始代码，方便调试
+          mermaidDiv.textContent = `渲染图表时出错: ${e.message}\n\n--- Mermaid 代码 ---\n${mermaidCode}`;
+        }
+      } else {
+        console.warn("Mermaid 库未完全加载或 run 方法不可用。依赖 class='mermaid' 自动渲染。");
+        // 如果 mermaid.run 不可用，通常 Mermaid 会自动查找 class="mermaid" 的元素渲染
+      }
+    }
+
+
+    /**
+     * 将提取的表格数据导出为 Excel 文件
+     */
+    function exportToExcel() {
+      if (!workbookData || !workbookData.fields || workbookData.fields.length === 0) {
+        // 如果没有数据，提示错误
+        setStatus('没有可导出的数据。', true);
+        return;
+      }
+
+      setStatus('正在生成 Excel 文件...');
+
+      // 准备 SheetJS 需要的数据格式 (对象数组)
+      // 列名与 displayTable 中一致
+      const headers = ['字段名称', '数据类型', '类型', '计算公式', '数据源', '字段 ID'];
+      const dataForSheet = workbookData.fields.map(field => ({
+        '字段名称': (field.field_caption || field.field_name).replace(/[\[\]]/g, ''), // 清理名称
+        '数据类型': field.field_datatype || '',
+        '类型': field.category || '',
+        '计算公式': field.field_calculation || '', // 保留公式
+        '数据源': field.datasource_caption || '',
+        '字段 ID': field.field_id || ''
+      }));
+
+      // 使用 SheetJS 工具函数将 JSON 数据转换为工作表对象
+      // header 参数指定了列的顺序和名称
+      const ws = XLSX.utils.json_to_sheet(dataForSheet, { header: headers });
+
+      // 可选：设置列宽 (wch 单位是字符宽度近似值)
+      ws['!cols'] = [
+        { wch: 30 }, // 字段名称
+        { wch: 15 }, // 数据类型
+        { wch: 18 }, // 类型
+        { wch: 60 }, // 计算公式 (给足宽度)
+        { wch: 25 }, // 数据源
+        { wch: 40 }  // 字段 ID
+      ];
+
+      // 创建一个新的工作簿对象
+      const wb = XLSX.utils.book_new();
+      // 将工作表添加到工作簿，并命名为 '字段详情'
+      XLSX.utils.book_append_sheet(wb, ws, '字段详情');
+
+      // 生成 Excel 文件名
+      const excelFileName = `${filenameBase}_计算导出.xlsx`;
+      // 使用 SheetJS 的 writeFile 函数生成并触发浏览器下载
+      XLSX.writeFile(wb, excelFileName);
+
+      setStatus(`Excel 文件 '${excelFileName}' 已生成。`, false); // 显示成功消息
+    }
+
+  </script>
+</body>
+
+</html>
