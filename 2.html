@@ -1757,7 +1757,7 @@
         XLSX.utils.book_append_sheet(wb, ws, '字段详情');
 
         // 生成 Excel 文件名
-        const filename = document.getElementById('filename').value || 'tableau_workbook';
+        const filename = currentFile ? currentFile.name.replace(/\.[^/.]+$/, '') : 'tableau_workbook';
         const excelFileName = `${filename}_字段分析_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
         // 使用 SheetJS 的 writeFile 函数生成并触发浏览器下载
@@ -1815,7 +1815,7 @@
         ]);
 
         // 生成文件名
-        const filename = document.getElementById('filename').value || 'tableau_workbook';
+        const filename = currentFile ? currentFile.name.replace(/\.[^/.]+$/, '') : 'tableau_workbook';
         const pdfFileName = `${filename}_字段分析_${new Date().toISOString().slice(0, 10)}.pdf`;
 
         // 添加标题
@@ -1883,7 +1883,7 @@
         const exportData = {
           metadata: {
             exportDate: new Date().toISOString(),
-            filename: document.getElementById('filename').value || 'tableau_workbook',
+            filename: currentFile ? currentFile.name : 'tableau_workbook',
             totalFields: processedData.fields.length,
             calculatedFields: processedData.fields.filter(f => f.category === 'Calculated_Field' || f.type === 'calculation').length,
             parameters: processedData.fields.filter(f => f.category === 'Parameters' || f.type === 'parameter').length,
@@ -1898,7 +1898,7 @@
         const jsonContent = JSON.stringify(exportData, null, 2);
 
         // 生成文件名
-        const filename = document.getElementById('filename').value || 'tableau_workbook';
+        const filename = currentFile ? currentFile.name.replace(/\.[^/.]+$/, '') : 'tableau_workbook';
         const jsonFileName = `${filename}_字段分析_${new Date().toISOString().slice(0, 10)}.json`;
 
         // 创建 Blob 并下载
