@@ -1158,37 +1158,44 @@
         // --- 数据后处理 ---
 
         // 1. 创建字段 ID -> 友好名称 [FieldName] 的映射
-        const fieldIdToDisplayNameMap = new Map(); // key: [原始ID], value: [友好名称]
+        const fieldIdToDisplayNameMap = new Map(); // 或者 calcMapRaw
         allFields.forEach(field => {
-          // 优先使用计算字段/参数的名称，避免被同名默认字段覆盖
+          // 移除 ID 中的方括号来得到 cleanId
+          const cleanId = field.field_id.replace(/[\[\]]/g, '');
           const friendlyName = `[${field.field_caption || field.field_name}]`;
+
           if (field.category === 'Calculated_Field' || field.category === 'Parameters') {
-            fieldIdToDisplayNameMap.set(field.field_id, friendlyName);
-          } else if (!fieldIdToDisplayNameMap.has(field.field_id)) {
-            fieldIdToDisplayNameMap.set(field.field_id, friendlyName);
+            fieldIdToDisplayNameMap.set(cleanId, friendlyName);
+          } else if (!fieldIdToDisplayNameMap.has(cleanId)) {
+            fieldIdToDisplayNameMap.set(cleanId, friendlyName);
           }
         });
 
-        // 2. 替换计算公式中的字段 ID 为友好名称 (修改 `field_calculation` 和 `formula`)
+
+        // 2. 替换计算公式中的字段 ID 为友好名称
         allFields.forEach(field => {
-          if (field.field_calculation_bk) { // 使用原始公式进行替换
+          if (field.field_calculation_bk) { // 确保使用原始公式备份进行替换
             let formula = field.field_calculation_bk;
-            // 获取所有映射的 key ([原始ID])，按长度降序排序
+
+            // 获取所有映射的 key (这些 key 现在是 cleanId，不带括号)，按长度降序排序
             const sortedKeys = Array.from(fieldIdToDisplayNameMap.keys()).sort((a, b) => b.length - a.length);
 
-            sortedKeys.forEach(keyId => {
-              // 使用正则表达式精确替换 `[原始ID]` 为对应的 `[友好名称]`
-              // 需要转义 keyId 中的正则表达式特殊字符 (包括方括号)
-              const escapedKeyId = keyId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-              // 创建正则表达式，匹配转义后的 keyId，全局替换，忽略大小写 (g, i)
-              const regex = new RegExp(escapedKeyId, 'gi'); // **注意：正则不再包含方括号，因为 keyId 已经带了**
-              const replacement = fieldIdToDisplayNameMap.get(keyId); // 获取对应的友好名称
+            sortedKeys.forEach(cleanKeyId => { // cleanKeyId 是不带括号的，例如 "Calculation_XYZ"
+              // 转义 cleanKeyId 中的正则表达式特殊字符
+              const escapedCleanKeyId = cleanKeyId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+              // 构建正则表达式以匹配原始公式中 "[escapedCleanKeyId]" 的形式
+              const regex = new RegExp(`\\[${escapedCleanKeyId}\\]`, 'gi');
+
+              const replacement = fieldIdToDisplayNameMap.get(cleanKeyId); // 使用 cleanKeyId 从 map 中获取友好名称
               if (replacement) {
                 formula = formula.replace(regex, replacement);
               }
             });
-            field.field_calculation = formula; // 更新友好名称的计算公式
-            field.formula = formula;         // 更新兼容属性
+            field.field_calculation = formula; // 更新为美化后的公式
+            if (field.hasOwnProperty('formula')) { // 如果存在旧的 'formula' 属性，也更新它
+              field.formula = formula;
+            }
           }
         });
 
@@ -1328,7 +1335,12 @@
 
         // 字段ID
         const tdId = document.createElement('td');
-        tdId.textContent = field.field_id || field.id || '';
+        let displayedFieldId = field.field_id || field.id || '';
+        // 循环移除所有外层方括号
+        while (displayedFieldId.startsWith('[') && displayedFieldId.endsWith(']') && displayedFieldId.length >= 2) {
+          displayedFieldId = displayedFieldId.substring(1, displayedFieldId.length - 1);
+        }
+        tdId.textContent = displayedFieldId;
 
         // 数据源
         const tdDatasource = document.createElement('td');
