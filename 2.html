@@ -1794,14 +1794,23 @@
 
         // 准备 SheetJS 需要的数据格式 (对象数组)
         const headers = ['字段名称', '数据类型', '类型', '计算公式', '数据源', '字段 ID'];
-        const dataForSheet = processedData.fields.map(field => ({
-          '字段名称': (field.field_caption || field.name).replace(/[\[\]]/g, ''), // 清理名称
-          '数据类型': field.field_datatype || field.datatype || '',
-          '类型': getFieldTypeDisplayName(field),
-          '计算公式': field.field_calculation || field.formula || '',
-          '数据源': field.datasource_caption || field.datasource || '',
-          '字段 ID': field.field_id || field.id || ''
-        }));
+        const dataForSheet = processedData.fields.map(field => {
+          let rawFieldId = field.field_id || field.id || '';
+          let excelFieldId = rawFieldId;
+          // 循环移除所有外层方括号
+          while (excelFieldId.startsWith('[') && excelFieldId.endsWith(']') && excelFieldId.length >= 2) {
+            excelFieldId = excelFieldId.substring(1, excelFieldId.length - 1);
+          }
+
+          return {
+            '字段名称': (field.field_caption || field.name).replace(/[\[\]]/g, ''), // 清理名称
+            '数据类型': field.field_datatype || field.datatype || '',
+            '类型': getFieldTypeDisplayName(field),
+            '计算公式': field.field_calculation || field.formula || '',
+            '数据源': field.datasource_caption || field.datasource || '',
+            '字段 ID': excelFieldId // <--- 使用处理后的 excelFieldId
+          };
+        });
 
         // 使用 SheetJS 工具函数将 JSON 数据转换为工作表对象
         // header 参数指定了列的顺序和名称
