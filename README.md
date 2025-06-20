@@ -29,7 +29,7 @@
 
 ## 使用方法
 
-1. 访问工具网站：[tbexport.imgwho.cc](https://tbexport.imgwho.cc)
+1. 访问工具网站：[tbexport.imgwho.com](https://tbexport.imgwho.com)
 2. 点击"选择 TWBX 文件"上传您的 Tableau 工作簿
 3. 等待分析完成后自动显示字段关系图
 4. 使用工具栏按钮导出需要的格式
