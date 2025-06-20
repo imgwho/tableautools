@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau 计算字段提取/导出 - 计算字段导出，依赖关系分析工具</title>
+    <meta name="description"
+        content="一款强大的Tableau工作簿分析工具，可自动提取和可视化计算字段之间的依赖关系，支持多种格式导出，帮助您更好地理解和维护复杂的Tableau工作簿。完全本地运行，确保数据安全。">
+    <meta name="keywords" content="Tableau, 数据分析, 字段关系, 可视化, 计算字段, 依赖分析, 文档生成, 工作簿分析, 函数分析, 项目迁移, ">
+    <meta property="og:title" content="Tableau 计算字段提取/导出 - 可视化计算字段依赖关系分析工具">
+    <meta property="og:description" content="一款强大的Tableau工作簿分析工具，可自动提取和可视化计算字段之间的依赖关系，支持多种格式导出。">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Tableau 计算字段提取/导出">
+    <meta name="twitter:description" content="可视化Tableau工作簿中的计算字段依赖关系，支持多种格式导出。">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Tableau 计算字段提取器",
+      "description": "一款强大的Tableau工作簿分析工具，可自动提取和可视化计算字段之间的依赖关系",
+      "applicationCategory": "数据分析工具",
+      "operatingSystem": "Web浏览器",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY"
+      }
+    }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <!-- Google Analytics 追踪代码 -->
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-7EKT602T1Z"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+
+        gtag('config', 'G-7EKT602T1Z');
+    </script>
+</head>
+
+<body class="bg-gray-100">
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white p-4">
+        <div class="container mx-auto">
+            <div class="flex justify-between items-center">
+                <h1 class="text-xl font-bold">Tableau 计算字段提取/导出 --By 华子的可视化</h1>
+                <div class="text-sm">Version 1.0</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="min-h-screen flex">
+        <!-- Left Panel -->
+        <div class="w-1/4 bg-white p-6 shadow-lg">
+            <h2 class="text-2xl font-bold mb-8 text-gray-900">功能面板</h2>
+
+            <div class="space-y-6">
+                <!-- 文件上传 -->
+                <div class="upload-section">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">选择 TWBX 文件</label>
+                    <input type="file" accept=".twbx" class="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        id="twbxFile">
+                </div>
+
+                <!-- 导出按钮组 -->
+                <div class="space-y-3">
+                    <button onclick="downloadSVG()"
+                        class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">
+                        导出 SVG
+                    </button>
+                    <button onclick="downloadPNG()"
+                        class="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
+                        导出 PNG
+                    </button>
+                    <button onclick="exportExcel()"
+                        class="w-full bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700">
+                        导出 Excel
+                    </button>
+                    <button onclick="exportPDF()"
+                        class="w-full bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">
+                        导出 PDF
+                    </button>
+                </div>
+
+                <div id="loading" class="hidden text-center">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mx-auto"></div>
+                    <p class="mt-2">处理中...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Preview Area -->
+        <div class="flex-1 p-6">
+            <div id="diagram-section" class="h-full w-full overflow-auto bg-white rounded-lg shadow-lg p-4">
+                <div id="mermaidDiv"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white p-4">
+        <div class="container mx-auto">
+            <div class="flex justify-between items-center">
+                <div>© 2025 Tableau 计算字段提取/导出 --By 华子</div>
+                <div class="text-sm">
+                    <a href="#" class="hover:text-indigo-400">使用说明</a> |
+                    <a href="#" class="hover:text-indigo-400">关于我们</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // 存储处理后的数据
+        let processedData = null;
+
+        // Mermaid初始化
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose',
+            maxTextSize: 100000,
+            flowchart: {
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+
+        // 添加字段关系提取函数
+        function extractFieldRelationships(xmlDoc) {
+            const relationships = [];
+            const fields = new Set();
+
+            try {
+                // 获取所有datasources
+                const datasources = xmlDoc.getElementsByTagName('datasource');
+                console.log('找到数据源:', datasources.length);
+
+                for (let datasource of datasources) {
+                    // 获取所有columns
+                    const columns = datasource.getElementsByTagName('column');
+                    console.log('找到列:', columns.length);
+
+                    for (let column of columns) {
+                        const calculations = column.getElementsByTagName('calculation');
+                        if (calculations.length > 0) {
+                            const name = column.getAttribute('caption') || column.getAttribute('name');
+                            const formula = calculations[0].getAttribute('formula');
+                            const datatype = column.getAttribute('datatype');
+
+                            if (name && formula) {
+                                fields.add({
+                                    name: name,
+                                    datatype: datatype || 'unknown',
+                                    formula: formula,
+                                    type: 'calculation'
+                                });
+
+                                // 提取依赖关系
+                                const matches = formula.match(/\[([^\]]+)\]/g);
+                                if (matches) {
+                                    const dependencies = matches
+                                        .map(m => m.slice(1, -1))
+                                        .filter(dep => dep !== name);
+
+                                    dependencies.forEach(dep => {
+                                        fields.add({
+                                            name: dep,
+                                            type: 'field'
+                                        });
+                                        relationships.push({
+                                            from: dep,
+                                            to: name,
+                                        });
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return {
+                    relationships: relationships,
+                    fields: Array.from(fields)
+                };
+            } catch (error) {
+                console.error('提取字段关系时出错:', error);
+                throw error;
+            }
+        }
+
+        // 添加生成Mermaid代码的函数
+        function generateMermaidCode(data) {
+            let code = 'graph LR\n';
+
+            // 添加节点
+            data.fields.forEach(field => {
+                const safeId = `n${field.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                code += `    ${safeId}["${field.name}"]\n`;
+                if (field.type === 'calculation') {
+                    code += `    style ${safeId} fill:#f9f9f9,stroke:#333\n`;
+                } else {
+                    code += `    style ${safeId} fill:#e1f5fe,stroke:#0288d1\n`;
+                }
+            });
+
+            // 添加关系
+            data.relationships.forEach(rel => {
+                const fromId = `n${rel.from.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                const toId = `n${rel.to.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                code += `    ${fromId} --> ${toId}\n`;
+            });
+
+            return code;
+        }
+
+        // Excel导出功能
+        function exportExcel() {
+            if (!processedData) {
+                alert('请先上传并处理TWBX文件');
+                return;
+            }
+
+            // 创建工作表数据
+            const worksheetData = processedData.fields.map(field => ({
+                'Field_Name': field.name,
+                'DataType': field.datatype || '',
+                'Type': field.type,
+                'Calculation': field.formula || '',
+                'Field_ID': field.id || '',
+                'Datasource': field.datasource || ''
+            }));
+
+            // 创建工作簿
+            const wb = XLSX.utils.book_new();
+
+            // 创建工作表
+            const ws = XLSX.utils.json_to_sheet(worksheetData);
+
+            // 设置列宽
+            const colWidths = [
+                { wch: 10 }, // Field_Name
+                { wch: 15 }, // DataType
+                { wch: 50 }, // Type
+                { wch: 20 }, // Calculation
+                { wch: 20 }, // Field_ID
+                { wch: 25 }  // Datasource
+            ];
+            ws['!cols'] = colWidths;
+
+            // 添加工作表到工作簿
+            XLSX.utils.book_append_sheet(wb, ws, "GeneralDetails");
+
+            // 导出文件
+            XLSX.writeFile(wb, `tableau_fields_${new Date().getTime()}.xlsx`);
+        }
+
+        // 修改processTWBX函数
+        async function processTWBX(file) {
+            const loading = document.getElementById('loading');
+            loading.classList.remove('hidden');
+
+            try {
+                const zip = new JSZip();
+                const contents = await zip.loadAsync(file);
+
+                // 查找.twb文件
+                let twbFile = null;
+                for (let filename in contents.files) {
+                    if (filename.endsWith('.twb')) {
+                        twbFile = contents.files[filename];
+                        break;
+                    }
+                }
+
+                if (!twbFile) {
+                    throw new Error('没有找到.twb文件');
+                }
+
+                const twbContent = await twbFile.async('text');
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(twbContent, 'text/xml');
+
+                // 提取字段关系并生成图表代码
+                const fieldData = extractFieldRelationships(xmlDoc);
+                console.log('提取的字段关系:', fieldData);
+
+                if (!fieldData.fields.length) {
+                    throw new Error('未找到任何字段关系');
+                }
+
+                const mermaidCode = generateMermaidCode(fieldData);
+                console.log('生成的Mermaid代码:', mermaidCode);
+
+                // 更新和渲染图表
+                const mermaidDiv = document.getElementById('mermaidDiv');
+                mermaidDiv.innerHTML = '';
+                mermaidDiv.setAttribute('class', 'mermaid');
+                mermaidDiv.textContent = mermaidCode;
+
+                try {
+                    const { svg } = await mermaid.render('graphDiv', mermaidCode);
+                    mermaidDiv.innerHTML = svg;
+                } catch (renderError) {
+                    console.error('渲染图表时出错:', renderError);
+                    throw new Error('图表渲染失败: ' + renderError.message);
+                }
+
+                // 保存处理后的数据
+                processedData = fieldData;
+
+            } catch (error) {
+                console.error('处理文件时出错:', error);
+                alert('处理文件时出错: ' + error.message);
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('twbxFile').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) processTWBX(file);
+        });
+
+        // 修改下载功能
+        function downloadSVG() {
+            const svg = document.querySelector("#mermaidDiv svg");
+            if (!svg) {
+                console.error('未找到SVG元素');
+                return;
+            }
+
+            try {
+                const svgData = new XMLSerializer().serializeToString(svg);
+                const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+                const svgUrl = URL.createObjectURL(svgBlob);
+
+                const downloadLink = document.createElement("a");
+                downloadLink.href = svgUrl;
+                downloadLink.download = "tableau_relationships.svg";
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(svgUrl);
+            } catch (error) {
+                console.error('下载SVG时出错:', error);
+                alert('下载失败: ' + error.message);
+            }
+        }
+
+        function downloadPNG() {
+            const svg = document.querySelector("#mermaidDiv svg");
+            if (!svg) {
+                console.error('未找到SVG元素');
+                return;
+            }
+
+            try {
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d");
+                const data = new XMLSerializer().serializeToString(svg);
+                const img = new Image();
+
+                img.onload = function () {
+                    canvas.width = svg.viewBox.baseVal.width || img.width;
+                    canvas.height = svg.viewBox.baseVal.height || img.height;
+                    ctx.drawImage(img, 0, 0);
+
+                    try {
+                        const pngUrl = canvas.toDataURL("image/png");
+                        const downloadLink = document.createElement("a");
+                        downloadLink.href = pngUrl;
+                        downloadLink.download = "tableau_relationships.png";
+                        document.body.appendChild(downloadLink);
+                        downloadLink.click();
+                        document.body.removeChild(downloadLink);
+                    } catch (error) {
+                        console.error('生成PNG时出错:', error);
+                        alert('下载失败: ' + error.message);
+                    }
+                };
+
+                img.onerror = function (error) {
+                    console.error('图片加载失败:', error);
+                    alert('图片加载失败');
+                };
+
+                img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(data)));
+            } catch (error) {
+                console.error('下载PNG时出错:', error);
+                alert('下载失败: ' + error.message);
+            }
+        }
+
+        // 新增 PDF 导出功能
+        function exportPDF() {
+            if (!processedData) {
+                alert('请先上传并处理TWBX文件');
+                return;
+            }
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({
+                    orientation: 'landscape',
+                    unit: 'pt',
+                    format: 'a4'
+                });
+
+                // 表格数据
+                const data = processedData.fields.map(field => [
+                    field.name || '',
+                    field.datatype || '',
+                    field.type || '',
+                    field.formula || '',
+                    field.datasource || ''
+                ]);
+
+                // 添加标题
+                doc.setFontSize(16);
+                doc.text('Tableau Fields Export', 40, 40);
+
+                // 创建表格
+                doc.autoTable({
+                    head: [['Field Name', 'Data Type', 'Type', 'Calculation', 'Datasource']],
+                    body: data,
+                    startY: 60,
+                    theme: 'grid',
+                    styles: {
+                        fontSize: 8,
+                        cellPadding: 2
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 80 },
+                        1: { cellWidth: 60 },
+                        2: { cellWidth: 60 },
+                        3: { cellWidth: 250 },
+                        4: { cellWidth: 80 }
+                    }
+                });
+
+                // 保存PDF
+                doc.save(`tableau_fields_${new Date().getTime()}.pdf`);
+            } catch (error) {
+                console.error('生成PDF时出错:', error);
+                alert('生成PDF失败: ' + error.message);
+            }
+        }
+    </script>
+</body>
+
+</html>
