@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TFL File Information Analyzer</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --light-gray: #f8f9fa;
+            --border-color: #dee2e6;
+            --text-color: #212529;
+            --white-color: #fff;
+            --header-bg: #f8f9fa;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            margin: 0;
+            background-color: var(--light-gray);
+            color: var(--text-color);
+            padding: 20px;
+        }
+
+        #app-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--white-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 2rem 3rem;
+        }
+
+        h1 { text-align: center; color: #1a1a1a; margin-top: 0; margin-bottom: 1.5rem; font-weight: 600; }
+        
+        #global-explanation { 
+            margin-bottom: 2rem; 
+            padding: 20px; 
+            border: 1px solid var(--border-color); 
+            border-radius: 6px; 
+            background-color: #f9f9f9; 
+            font-size: 0.95em; 
+            line-height: 1.6;
+        }
+        #global-explanation h3 { margin-top: 0; color: var(--primary-color); }
+        #global-explanation code { background-color: #e9ecef; padding: 2px 5px; border-radius: 4px; font-size: 0.9em; }
+
+        #drop-zone {
+            border: 3px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 40px 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        #drop-zone.drag-over { border-color: var(--primary-color); background-color: #e6f7ff; }
+        #drop-zone p { margin: 0; color: #666; font-size: 1.1rem; }
+        #file-input { display: none; }
+        #status { text-align: center; margin-top: 1.5rem; font-size: 0.9rem; color: #555; min-height: 20px; }
+        #results-container { margin-top: 2rem; text-align: left; }
+
+        .result-card { border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 2rem; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .result-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background-color: var(--header-bg); border-bottom: 1px solid var(--border-color); }
+        .result-header h3 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+        .result-header a { text-decoration: none; padding: 6px 12px; border: 1px solid var(--primary-color); border-radius: 4px; color: var(--primary-color); background-color: var(--white-color); cursor: pointer; transition: all 0.3s; }
+        .result-header a:hover { background-color: var(--primary-color); color: var(--white-color); }
+
+        .result-body {
+            display: grid;
+            grid-template-columns: 35% 65%;
+            gap: 1px;
+            background-color: var(--border-color);
+        }
+        
+        .explanation-pane {
+            padding: 20px; 
+            background-color: var(--white-color); 
+            overflow-x: hidden;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .json-pane { padding: 20px; background-color: var(--white-color); overflow-x: auto; }
+
+        .explanation-pane h4 { margin-top: 15px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 8px; color: var(--primary-color); }
+        .explanation-pane h4:first-child { margin-top: 0; }
+        .explanation-pane ul { padding-left: 20px; margin: 0 0 15px 0; }
+        .explanation-pane li { margin-bottom: 8px; line-height: 1.5; }
+        .explanation-pane code {
+            background-color: #e9ecef;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            word-break: break-all;
+        }
+        .explanation-pane .field-list-item {
+            display: inline-block;
+            margin-right: 8px;
+            margin-bottom: 4px;
+        }
+
+
+        .json-pane { max-height: 600px; overflow: auto; }
+        .json-pane pre[class*="language-"] {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .json-pane::-webkit-scrollbar { width: 10px; height: 10px; }
+        .json-pane::-webkit-scrollbar-track { background: #272822; }
+        .json-pane::-webkit-scrollbar-thumb { background-color: #555; border-radius: 5px; border: 2px solid #272822; }
+        .json-pane::-webkit-scrollbar-thumb:hover { background-color: #777; }
+        
+        .mermaid-container { grid-column: 1 / -1; background-color: white; padding: 20px; text-align: center; border-top: 1px solid var(--border-color); }
+        .mermaid-container h4 { text-align: left; }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <h1>TFL File Processor</h1>
+
+        <div id="global-explanation">
+            <h3>Global Explanation: Tableau Prep Flow File (JSON) Structure Analysis</h3>
+            <p>This tool parses Tableau Prep flow files (`.tfl`) and extracts their internal flow definitions, presenting them in JSON format. A standard flow file mainly consists of the following parts:</p>
+            <ul>
+                <li><code>nodes</code>: The core object, containing detailed definitions of all steps (nodes) in the flow. Each node has a unique ID and type (e.g., input, output, join, aggregate).</li>
+                <li><code>connections</code>: Describes the data source connection information used in the flow, including connection type, server address, database name, etc.</li>
+                <li><code>fields</code>: In input nodes, this array lists the field names, data types, and order of the source data.</li>
+                <li><code>relation</code>: Defines the data source for an input node, which can be a specific <code>table</code> in a database or a custom <code>query</code> (SQL statement).</li>
+                <li><code>actionNode</code>: In transformation steps (like joins or aggregations), this object defines the specific configuration and operations for that step.</li>
+            </ul>
+        </div>
+
+        <div id="drop-zone">
+            <p>Drag and drop one or more .tfl files here<br>or click this area to select files</p>
+            <input type="file" id="file-input" accept=".tfl" multiple>
+        </div>
+        <div id="status">Status: Waiting for files...</div>
+        <div id="results-container"></div>
+    </div>
+
+    <script>
+        // Initialize Mermaid
+        mermaid.initialize({ startOnLoad: false, theme: 'base', themeVariables: { 'primaryColor': '#f0f2f5' } });
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const statusDiv = document.getElementById('status');
+        const resultsContainer = document.getElementById('results-container');
+
+        // --- Event Listeners ---
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); });
+        dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
+
+        // --- Core Logic ---
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+            resultsContainer.innerHTML = '';
+            updateStatus(`Received ${files.length} file(s), processing...`);
+            
+            for (const file of files) {
+                await processFile(file);
+            }
+            
+            updateStatus(`All tasks completed!`);
+            await mermaid.run();
+        }
+
+        function processFile(file) {
+            return new Promise((resolve) => {
+                if (!file.name.toLowerCase().endsWith('.tfl')) {
+                    resolve();
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    JSZip.loadAsync(event.target.result)
+                        .then(zip => {
+                            const flowFile = zip.file('flow');
+                            if (flowFile) return flowFile.async('string');
+                            throw new Error("'flow' file not found in the archive.");
+                        })
+                        .then(content => {
+                            displayResult(content, file.name);
+                            resolve();
+                        })
+                        .catch(error => {
+                            displayError(file.name, error.message);
+                            resolve();
+                        });
+                };
+                reader.onerror = () => { displayError(file.name, "Failed to read the file."); resolve(); };
+                reader.readAsArrayBuffer(file);
+            });
+        }
+        
+        function generateExplanation(jsonData) {
+            let html = '';
+            const nodes = jsonData.nodes || {};
+            const getTableName = (node) => node.relation?.type === 'table' ? node.relation.table : `(Custom SQL: ${node.name})`;
+
+            const inputs = Object.values(nodes).filter(n => n.baseType === 'input');
+            if (inputs.length > 0) {
+                html += '<h4>📥 Data Sources (Inputs)</h4><ul>';
+                inputs.forEach(input => {
+                    html += `<li><strong>${input.name}</strong>: Reads data from <code>${getTableName(input)}</code>.`;
+                    if (input.fields?.length > 0) {
+                        const fieldsHtml = input.fields.map(f => `<span class="field-list-item"><code>${f.name}(${f.type})</code></span>`).join('');
+                        html += `<ul><li>Contains fields: ${fieldsHtml}</li></ul>`;
+                    }
+                    html += '</li>';
+                });
+                html += '</ul>';
+            }
+
+            const joins = Object.values(nodes).filter(n => n.nodeType?.includes('Join') && n.actionNode?.conditions);
+            if (joins.length > 0) {
+                html += '<h4>🔗 Data Joins (Joins)</h4><ul>';
+                joins.forEach(join => {
+                    const joinType = join.actionNode.joinType || 'Unknown';
+                    const conditions = join.actionNode.conditions.map(c => `<code>${c.leftExpression} ${c.comparator} ${c.rightExpression}</code>`).join(' AND ');
+                    html += `<li><strong>${join.name}</strong>: Performs a <code>${joinType.toUpperCase()} JOIN</code>. Join condition: ${conditions}</li>`;
+                });
+                html += '</ul>';
+            }
+
+            const outputs = Object.values(nodes).filter(n => n.baseType === 'output');
+            if (outputs.length > 0) {
+                html += '<h4>📤 Data Outputs (Outputs)</h4><ul>';
+                outputs.forEach(output => {
+                    html += `<li>Publishes the result as a data source named <code>${output.datasourceName || 'Untitled'}</code> in the project <code>${output.projectName || 'Default Project'}</code>.</li>`;
+                });
+                html += '</ul>';
+            }
+
+            return html || '<p>Could not extract key summary information from this file.</p>';
+        }
+
+        function generateFlowchartSyntax(jsonData) {
+            let mermaidSyntax = 'graph TD\n';
+            const nodes = jsonData.nodes || {};
+            const nodeMap = new Map(Object.entries(nodes));
+            
+            const safeId = (id) => id.replace(/-/g, '');
+            const safeLabel = (label) => label ? label.replace(/"/g, '#quot;') : 'Untitled';
+
+            nodeMap.forEach((node, id) => {
+                const id_ = safeId(id);
+                const label_ = safeLabel(node.name);
+                if (node.baseType === 'input') mermaidSyntax += `    ${id_}[["📥 ${label_}"]]
+`;
+                else if (node.baseType === 'output') mermaidSyntax += `    ${id_}[("📤 ${label_}")]
+`;
+                else if (node.nodeType?.includes('Join')) mermaidSyntax += `    ${id_}{{"🔗 ${label_}"}}
+`;
+                else mermaidSyntax += `    ${id_}["⚙️ ${label_}"]
+`;
+            });
+
+            nodeMap.forEach((node, id) => {
+                if (node.nextNodes) {
+                    node.nextNodes.forEach(nextNode => {
+                        mermaidSyntax += `    ${safeId(id)} --> ${safeId(nextNode.nextNodeId)}
+`;
+                    });
+                }
+            });
+            return mermaidSyntax;
+        }
+
+        function displayResult(content, originalFileName) {
+            const baseName = originalFileName.replace(/\.tfl$/i, '');
+            const jsonFileName = `${baseName}.json`;
+            
+            const card = document.createElement('div');
+            card.className = 'result-card';
+            
+            const header = document.createElement('div');
+            header.className = 'result-header';
+            const title = document.createElement('h3');
+            title.textContent = jsonFileName;
+            const downloadLink = document.createElement('a');
+            const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+            downloadLink.href = URL.createObjectURL(blob);
+            downloadLink.download = jsonFileName;
+            downloadLink.textContent = `Download JSON`;
+            header.appendChild(title);
+            header.appendChild(downloadLink);
+            card.appendChild(header);
+
+            const body = document.createElement('div');
+            body.className = 'result-body';
+            
+            const explanationPane = document.createElement('div');
+            explanationPane.className = 'explanation-pane';
+            
+            const jsonPane = document.createElement('div');
+            jsonPane.className = 'json-pane';
+            const pre = document.createElement('pre');
+            const code = document.createElement('code');
+            code.className = 'language-json';
+            
+            pre.appendChild(code);
+            jsonPane.appendChild(pre);
+            body.appendChild(explanationPane);
+            body.appendChild(jsonPane);
+            
+            let jsonObj;
+            try {
+                jsonObj = JSON.parse(content);
+                explanationPane.innerHTML = generateExplanation(jsonObj);
+                code.textContent = JSON.stringify(jsonObj, null, 2);
+            } catch (e) {
+                explanationPane.innerHTML = '<h4>Summary Analysis Failed</h4><p>Could not parse the file content as standard JSON.</p>';
+                code.textContent = content;
+            }
+            
+            card.appendChild(body);
+            if (jsonObj) {
+                const flowchartContainer = document.createElement('div');
+                flowchartContainer.className = 'mermaid-container';
+                const mermaidDiv = document.createElement('div');
+                mermaidDiv.className = 'mermaid';
+                mermaidDiv.textContent = generateFlowchartSyntax(jsonObj);
+                flowchartContainer.innerHTML = '<h4>🗺️ Flow Diagram</h4>';
+                flowchartContainer.appendChild(mermaidDiv);
+                card.appendChild(flowchartContainer);
+            }
+            
+            resultsContainer.appendChild(card);
+            
+            Prism.highlightElement(code);
+        }
+        
+        function displayError(fileName, message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'result-card';
+            errorDiv.style.padding = '20px';
+            errorDiv.style.color = 'red';
+            errorDiv.innerHTML = `<h3>Failed to process ${fileName}</h3><p>${message}</p>`;
+            resultsContainer.appendChild(errorDiv);
+        }
+
+        function updateStatus(message) { statusDiv.textContent = `Status: ${message}`; }
+    </script>
+
+</body>
+</html>
