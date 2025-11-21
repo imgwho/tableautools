@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau 形状提取器 (增强版)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 900px;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .file-input-wrapper {
+            position: relative;
+            text-align: center;
+            background-color: #007bff;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            display: inline-block;
+            margin: 20px auto;
+            transition: background-color 0.3s;
+        }
+        .file-input-wrapper:hover {
+            background-color: #0056b3;
+        }
+        #file-input {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        #status {
+            text-align: center;
+            margin-top: 20px;
+            font-style: italic;
+            color: #666;
+            min-height: 20px;
+        }
+        #results {
+            margin-top: 30px;
+        }
+        #image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 20px;
+            padding-top: 20px;
+        }
+        .image-card {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .image-card img {
+            max-width: 100%;
+            height: auto;
+            max-height: 100px;
+            object-fit: contain;
+            margin-bottom: 10px;
+        }
+        .image-card .filename {
+            font-size: 12px;
+            word-wrap: break-word;
+            margin-bottom: 10px;
+            flex-grow: 1;
+        }
+        .image-card a {
+            font-size: 13px;
+            text-decoration: none;
+            background-color: #28a745;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .image-card a:hover {
+            background-color: #218838;
+        }
+        .info-box {
+            background-color: #e9f7ff;
+            border-left: 5px solid #007bff;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .info-box ul {
+            padding-left: 20px;
+            margin: 0;
+        }
+        .info-box li {
+             margin-bottom: 8px;
+        }
+        .twb-results-list {
+            list-style-type: none;
+            padding: 0;
+            margin-top: 15px;
+        }
+        .twb-results-list li {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+        }
+        .twb-results-list .palette {
+            font-weight: bold;
+            color: #0056b3;
+        }
+        .results-section-title {
+            margin-top: 25px;
+            margin-bottom: 10px;
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Tableau 形状提取器 (增强版)</h1>
+        
+        <div class="info-box">
+            <strong>使用说明:</strong>
+            <p>此工具现在融合了两种提取策略：</p>
+            <ul>
+                <li><strong>内嵌图片 (新)</strong>: 根据您提供的Python代码逻辑，工具会解析 `.twb` (或 `.twbx` 中的 `.twb`) 文件，寻找以Base64编码内嵌的图片并将其直接提取出来。</li>
+                <li><strong>打包图片</strong>: 对于 `.twbx` 文件，工具还会扫描 `Shapes/` 目录，提取所有打包的图片文件。</li>
+                <li><strong>引用路径</strong>: 对于 `.twb` 文件，如果找不到内嵌图片，它会列出图片在您本地电脑上的引用路径。</li>
+            </ul>
+        </div>
+        
+        <div style="text-align:center;">
+            <label class="file-input-wrapper">
+                <span>选择 .twb 或 .twbx 文件</span>
+                <input type="file" id="file-input" accept=".twb,.twbx">
+            </label>
+        </div>
+
+        <div id="status"></div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const statusDiv = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+        let extractedImageNames = new Set();
+
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function resetUI() {
+            statusDiv.textContent = '';
+            resultsDiv.innerHTML = '';
+            extractedImageNames.clear();
+        }
+        
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            resetUI();
+
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+            if (fileExtension === 'twbx') {
+                handleTwbx(file);
+            } else if (fileExtension === 'twb') {
+                handleTwb(file);
+            } else {
+                statusDiv.textContent = '错误：请选择一个 .twb 或 .twbx 文件。';
+            }
+        }
+
+        async function handleTwbx(file) {
+            statusDiv.textContent = `正在解压并分析 ${file.name}...`;
+            try {
+                const zip = await JSZip.loadAsync(file);
+                let foundItems = false;
+
+                // 策略1: 扫描 Shapes/ 目录 (常见方式)
+                const shapePromises = [];
+                zip.folder("Shapes").forEach((relativePath, fileEntry) => {
+                    if (!fileEntry.dir) {
+                        const fileName = fileEntry.name.split('/').pop();
+                        if (!extractedImageNames.has(fileName)) {
+                            shapePromises.push(
+                                fileEntry.async('base64').then(base64 => {
+                                    extractedImageNames.add(fileName);
+                                    return { name: fileName, data: base64, type: fileName.split('.').pop() };
+                                })
+                            );
+                        }
+                    }
+                });
+                
+                if (shapePromises.length > 0) {
+                    addResultsSection('从 Shapes/ 目录中提取的图片', 'image-grid-packaged');
+                    const images = await Promise.all(shapePromises);
+                    images.forEach(img => displayImage(img, 'image-grid-packaged'));
+                    foundItems = true;
+                }
+
+                // 策略2: 查找并解析内部的 .twb 文件
+                const twbFileEntry = Object.values(zip.files).find(f => f.name.endsWith('.twb') && !f.dir);
+                if (twbFileEntry) {
+                    statusDiv.textContent = `正在解析内部的 ${twbFileEntry.name}...`;
+                    const xmlString = await twbFileEntry.async("string");
+                    const twbFound = await parseTwbContent(xmlString);
+                    if (twbFound) foundItems = true;
+                }
+
+                if (foundItems) {
+                     statusDiv.textContent = `提取完成！共找到 ${extractedImageNames.size} 个唯一形状。`;
+                } else {
+                    statusDiv.textContent = '未在此 .twbx 文件中找到任何自定义形状。';
+                }
+
+            } catch (err) {
+                statusDiv.textContent = `处理 .twbx 文件时出错: ${err.message}`;
+                console.error(err);
+            }
+        }
+
+        async function handleTwb(file) {
+            statusDiv.textContent = `正在解析 ${file.name}...`;
+            try {
+                const xmlString = await file.text();
+                const foundItems = await parseTwbContent(xmlString);
+                
+                if (foundItems) {
+                    statusDiv.textContent = '解析完成！';
+                } else {
+                    statusDiv.textContent = '未在此 .twb 文件中找到任何内嵌或引用的形状。';
+                }
+            } catch (err) {
+                statusDiv.textContent = `读取或解析 .twb 文件时出错: ${err.message}`;
+                console.error(err);
+            }
+        }
+        
+        async function parseTwbContent(xmlString) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlString, "application/xml");
+            let foundSomething = false;
+
+            // 策略1: 查找内嵌的 Base64 图片 (来自 Python 逻辑)
+            const embeddedShapes = xmlDoc.querySelectorAll('external > shapes > shape');
+            if (embeddedShapes.length > 0) {
+                 addResultsSection('提取的内嵌图片', 'image-grid-embedded');
+                 embeddedShapes.forEach(node => {
+                    const nameAttr = node.getAttribute('name');
+                    const base64Data = node.textContent;
+                    if (nameAttr && base64Data) {
+                        const fileName = nameAttr.split('/').pop(); // 获取文件名
+                        if (!extractedImageNames.has(fileName)) {
+                             const img = { name: fileName, data: base64Data, type: fileName.split('.').pop() };
+                             displayImage(img, 'image-grid-embedded');
+                             extractedImageNames.add(fileName);
+                             foundSomething = true;
+                        }
+                    }
+                });
+            }
+
+            // 策略2: 查找引用的形状路径
+            const referencedShapes = xmlDoc.querySelectorAll('column[shape]');
+            if (referencedShapes.length > 0) {
+                const uniqueShapePaths = new Set();
+                referencedShapes.forEach(node => {
+                    uniqueShapePaths.add(node.getAttribute('shape'));
+                });
+                if (uniqueShapePaths.size > 0) {
+                    addResultsSection('引用的形状路径 (需在本地存储库中查找)', 'twb-results-list');
+                    const list = document.getElementById('twb-results-list');
+                    uniqueShapePaths.forEach(shapePath => {
+                        const parts = shapePath.split('/');
+                        const palette = parts.length > 1 ? parts[0] : '默认';
+                        const shapeName = parts.length > 1 ? parts.slice(1).join('/') : parts[0];
+                        
+                        const li = document.createElement('li');
+                        li.innerHTML = `调色板(文件夹): <span class="palette">${palette}</span>, 文件名: <span class="filename">${shapeName}</span>`;
+                        list.appendChild(li);
+                    });
+                    foundSomething = true;
+                }
+            }
+            return foundSomething;
+        }
+
+        function addResultsSection(title, gridId) {
+            if (document.getElementById(gridId)) return; // Avoid creating duplicate sections
+            const titleEl = document.createElement('h3');
+            titleEl.className = 'results-section-title';
+            titleEl.textContent = title;
+
+            const gridEl = document.createElement('div');
+            gridEl.id = gridId;
+            // Assign class based on ID
+            if (gridId.startsWith('image-grid')) {
+                gridEl.className = 'image-grid';
+            } else {
+                gridEl.className = 'twb-results-list';
+            }
+            
+            resultsDiv.appendChild(titleEl);
+            resultsDiv.appendChild(gridEl);
+        }
+        
+        function displayImage({ name, data, type }, gridId) {
+            const grid = document.getElementById(gridId);
+            if (!grid) return;
+
+            const card = document.createElement('div');
+            card.className = 'image-card';
+
+            const img = document.createElement('img');
+            const mimeType = type === 'svg' ? 'image/svg+xml' : `image/${type}`;
+            img.src = `data:${mimeType};base64,${data}`;
+            img.alt = name;
+            // Handle broken image links from bad base64 data
+            img.onerror = () => { img.alt = `无法加载: ${name}`; card.style.backgroundColor = '#ffdddd'; };
+
+            const filenameDiv = document.createElement('div');
+            filenameDiv.className = 'filename';
+            filenameDiv.textContent = name;
+
+            const downloadLink = document.createElement('a');
+            downloadLink.href = img.src;
+            downloadLink.download = name;
+            downloadLink.textContent = '下载';
+
+            card.appendChild(img);
+            card.appendChild(filenameDiv);
+            card.appendChild(downloadLink);
+            grid.appendChild(card);
+        }
+    </script>
+</body>
+</html>

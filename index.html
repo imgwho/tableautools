@@ -4,1338 +4,243 @@
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>Tableau Workbook Analyzer</title>
+  <title>Tableau Workbook Analyzer | Tableau Tools</title>
+  <meta name="description"
+    content="Analyze Tableau workbooks (.twb, .twbx) to visualize field dependencies, calculated fields, and data lineage." />
+  <meta name="keywords" content="Tableau, Workbook, Analyzer, Dependency Graph, Lineage, TWB, TWBX" />
+  <meta property="og:title" content="Tableau Workbook Analyzer" />
+  <meta property="og:description" content="Visualize dependencies and analyze fields in your Tableau workbooks." />
+  <meta property="og:type" content="website" />
+
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+
+  <!-- Tailwind & Shared Theme -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="js/shared/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <!-- Cytoscape.js and dependencies - order matters! -->
+
+  <!-- Cytoscape.js and dependencies -->
   <script src="https://unpkg.com/layout-base/layout-base.js"></script>
   <script src="https://unpkg.com/cose-base/cose-base.js"></script>
   <script src="https://unpkg.com/cytoscape-cose-bilkent/cytoscape-cose-bilkent.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
-    <script type="text/javascript">
-    (function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+
+  <!-- Analytics -->
+  <script type="text/javascript">
+    (function (c, l, a, r, i, t, y) {
+      c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments) };
+      t = l.createElement(r); t.async = 1; t.src = "https://www.clarity.ms/tag/" + i;
+      y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
     })(window, document, "clarity", "script", "txi1uqiq8y");
-</script>
-  <script>
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            "primary": "#fada38",
-            "background-light": "#FFFBEB",
-            "background-dark": "#23200f",
-            "accent": "#3B82F6",
-            "success": "#10B981",
-            "error": "#EF4444",
-          },
-          fontFamily: {
-            "display": ["Work Sans", "Noto Sans", "sans-serif"]
-          },
-          borderRadius: {
-            "DEFAULT": "0.25rem",
-            "lg": "0.5rem",
-            "xl": "0.75rem",
-            "full": "9999px"
-          },
-        },
-      },
-    }
   </script>
-  <style>
-    .material-symbols-outlined {
-      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-      font-size: 20px;
-    }
-
-    #cy {
-      width: 100%;
-      height: 100%;
-      min-height: 600px;
-      background-color: #f9fafb;
-      border-radius: 0.5rem;
-    }
-
-    .dark #cy {
-      background-color: #1f2937;
-    }
-
-    .sortable {
-      cursor: pointer;
-      user-select: none;
-    }
-
-    .sortable:hover {
-      background-color: rgba(59, 130, 246, 0.1);
-    }
-
-    .graph-controls {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    .control-btn {
-      padding: 0.5rem 1rem;
-      border-radius: 0.5rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      border: 1px solid #e5e7eb;
-      background: white;
-      color: #374151;
-    }
-
-    .control-btn:hover {
-      background: #f3f4f6;
-      border-color: #3B82F6;
-    }
-
-    .control-btn.active {
-      background: #3B82F6;
-      color: white;
-      border-color: #3B82F6;
-    }
-
-    .dark .control-btn {
-      background: #374151;
-      color: #e5e7eb;
-      border-color: #4b5563;
-    }
-
-    .dark .control-btn:hover {
-      background: #4b5563;
-    }
-
-    .dark .control-btn.active {
-      background: #3B82F6;
-      color: white;
-    }
-  </style>
 </head>
 
-<body class="font-display bg-background-light dark:bg-background-dark text-[#333333] dark:text-gray-200">
-  <div class="relative flex min-h-screen w-full flex-col">
-    <header
-      class="sticky top-0 z-20 w-full border-b border-solid border-[#E5E7EB] bg-white/80 dark:border-gray-700 dark:bg-background-dark/80 backdrop-blur-sm">
-      <div class="mx-auto flex max-w-7xl items-center justify-between whitespace-nowrap px-4 sm:px-6 lg:px-8 py-3">
-        <div class="flex items-center gap-3 text-[#1c1a0d] dark:text-gray-100">
-          <div class="text-accent size-6">
-            <svg fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm2 14h3v-3H6v3zm0-5h3V9H6v3zm0-5h3V4H6v3zm5 10h3v-3h-3v3zm0-5h3V9h-3v3zm0-5h3V4h-3v3zm5 10h3v-3h-3v3zm0-5h3V9h-3v3zm0-5h3V4h-3v3z">
-              </path>
-            </svg>
-          </div>
-          <h1 class="text-xl font-bold leading-tight tracking-tighter">
-            Tableau Workbook Analyzer
-          </h1>
-        </div>
-        <div class="flex gap-2">
-          <button
-            class="flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-accent px-4 text-sm font-bold text-white transition-colors hover:bg-accent/90">
-            <span class="truncate">Twb_Analysis</span>
-          </button>
-          <button onclick="window.location.href='https://tableautools.imgwho.com/Twb_Docs.html'"
-            class="flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-100 px-4 text-sm font-bold text-gray-800 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
-            <span class="truncate">Twb_Docs</span>
-          </button>
-          <button onclick="window.location.href='https://tableautools.imgwho.com/tfl.html'"
-            class="flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-100 px-4 text-sm font-bold text-gray-800 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
-            <span class="truncate">Tfl_Analysis</span>
-          </button>
-        </div>
-      </div>
-    </header>
-    <div
-      class="sticky top-[61px] z-10 w-full border-b border-solid border-[#E5E7EB] bg-white dark:border-gray-700 dark:bg-gray-800">
-      <div class="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 py-3 gap-4">
-        <div id="dropzone"
-          class="flex-grow flex items-center gap-3 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 p-2 text-center text-gray-500 dark:text-gray-400 min-h-[4rem] hover:border-accent/70 transition-colors cursor-pointer">
-          <span class="material-symbols-outlined text-3xl">upload_file</span>
-          <p class="text-sm font-medium">
-            Drag &amp; drop Tableau workbook (.twb, .twbx) here or
-            <button onclick="document.getElementById('file-input').click()"
-              class="inline-flex h-9 min-w-0 max-w-fit cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-accent px-3 text-sm font-bold text-white transition-colors hover:bg-accent/90">
-              <span class="material-symbols-outlined text-base">folder_open</span>
-              <span class="truncate">Browse</span>
-            </button>
-          </p>
-          <input type="file" id="file-input" accept=".twb,.twbx" style="display: none;" onchange="handleFileSelect(event)" />
-        </div>
-        <div class="flex gap-2">
-          <button id="btn-export-fields" onclick="exportFields()"
-            class="flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-100 px-4 text-sm font-bold text-gray-800 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled="">
-            <span class="material-symbols-outlined text-base">description</span>
-            <span class="truncate">Export Fields</span>
-          </button>
-          <button id="btn-export-graph" onclick="exportGraph()"
-            class="flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-100 px-4 text-sm font-bold text-gray-800 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled="">
-            <span class="material-symbols-outlined text-base">image</span>
-            <span class="truncate">Export Graph</span>
-          </button>
-        </div>
-      </div>
-    </div>
+<body class="bg-gray-50 text-gray-900 transition-colors duration-200">
+  <div id="app" class="flex min-h-screen flex-col font-body">
+    <div id="header-container"></div>
     <main class="flex-grow p-4 sm:p-6 lg:p-8">
       <div class="mx-auto max-w-7xl">
-        <div class="mb-8">
-          <h2 class="text-3xl font-black tracking-[-0.033em] text-gray-900 dark:text-white">
-            Workbook Analysis Dashboard
-          </h2>
-          <p id="stats" class="text-sm text-gray-500 dark:text-gray-400 mt-2 hidden"></p>
+        <div class="mb-8 flex items-end justify-between">
+          <div>
+            <h2 class="text-3xl font-black tracking-tight text-gray-900 dark:text-white">
+              Workbook Analysis
+            </h2>
+            <p id="stats" class="text-sm text-gray-500 dark:text-gray-400 mt-2 hidden font-medium"></p>
+          </div>
         </div>
-        <div class="grid grid-cols-1 gap-6">
-          <div
-            class="flex flex-col gap-6 rounded-xl border border-[#E5E7EB] bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center justify-between">
-              <h3 class="text-xl font-bold leading-tight tracking-tight text-gray-900 dark:text-white">
-                Parsed Fields
-              </h3>
-              <div class="flex gap-2">
-                <input type="text" id="search-input" placeholder="Search fields..."
-                  class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  oninput="filterTable()" />
+
+        <!-- Upload Zone -->
+        <div
+          class="mb-8 rounded-2xl border-2 border-dashed border-gray-300 bg-white p-6 shadow-sm transition-all hover:border-primary-500 hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-4 w-full">
+              <div
+                class="mb-0 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600 dark:bg-primary-900/30">
+                <span
+                  class="material-symbols-outlined text-2xl text-gray-500 dark:text-gray-400 group-hover:text-primary-600 dark:group-hover:text-primary-400">upload_file</span>
               </div>
+              <div class="flex-grow text-left">
+                <p class="text-sm font-medium text-gray-900 dark:text-white">
+                  Upload Tableau Workbook
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  Drag &amp; drop .twb or .twbx files here
+                </p>
+              </div>
+              <button onclick="document.getElementById('file-input').click()"
+                class="hidden sm:inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary-500 px-4 text-sm font-bold text-white shadow-lg shadow-primary-500/20 transition-all hover:bg-primary-600 hover:shadow-primary-500/40 active:scale-95">
+                <span class="material-symbols-outlined text-lg">folder_open</span>
+                <span>Browse</span>
+              </button>
+              <input type="file" id="file-input" accept=".twb,.twbx" style="display: none;"
+                onchange="handleFileSelect(event)" />
             </div>
-            <div class="overflow-hidden rounded-lg border border-[#E5E7EB] dark:border-gray-700">
-              <div class="overflow-x-auto h-[30rem] lg:h-[36rem]">
-                <table id="fields-table" class="min-w-full divide-y divide-[#E5E7EB] dark:divide-gray-700">
-                  <thead class="bg-gray-50 dark:bg-gray-900/50 sticky top-0 z-[1]">
-                    <tr>
-                      <th onclick="sortTable(0)"
-                        class="sortable px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                        scope="col">
-                        Name ▼
-                      </th>
-                      <th onclick="sortTable(1)"
-                        class="sortable px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                        scope="col">
-                        Data Type
-                      </th>
-                      <th onclick="sortTable(2)"
-                        class="sortable px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                        scope="col">
-                        Field Type
-                      </th>
-                      <th onclick="sortTable(3)"
-                        class="sortable px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                        scope="col">
-                        Data Source
-                      </th>
-                      <th
-                        class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                        scope="col">
-                        Formula
-                      </th>
-                      <th
-                        class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                        scope="col">
-                        Field ID
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody id="table-body" class="divide-y divide-[#E5E7EB] bg-white dark:divide-gray-700 dark:bg-gray-800">
-                    <tr class="animate-pulse">
-                      <td class="whitespace-nowrap px-4 py-3">
-                        <div class="h-4 w-24 rounded bg-gray-200 dark:bg-gray-700"></div>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3">
-                        <div class="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700"></div>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3">
-                        <div class="h-4 w-20 rounded bg-gray-200 dark:bg-gray-700"></div>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3">
-                        <div class="h-4 w-28 rounded bg-gray-200 dark:bg-gray-700"></div>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3">
-                        <div class="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700"></div>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3">
-                        <div class="h-4 w-40 rounded bg-gray-200 dark:bg-gray-700"></div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+
+            <div class="flex gap-2">
+              <button id="btn-export-fields" onclick="exportFields()"
+                class="flex h-10 items-center justify-center gap-2 rounded-lg bg-white border border-gray-200 px-4 text-sm font-bold text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:text-primary-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
+                <span class="material-symbols-outlined text-lg">description</span>
+                <span class="hidden lg:inline">Export Fields</span>
+              </button>
+              <button id="btn-export-graph" onclick="exportGraph()"
+                class="flex h-10 items-center justify-center gap-2 rounded-lg bg-white border border-gray-200 px-4 text-sm font-bold text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:text-primary-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>
+                <span class="material-symbols-outlined text-lg">image</span>
+                <span class="hidden lg:inline">Export Graph</span>
+              </button>
             </div>
           </div>
-          <div
-            class="flex flex-col gap-6 rounded-xl border border-[#E5E7EB] bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center justify-between flex-wrap gap-4">
-              <h3 class="text-xl font-bold leading-tight tracking-tight text-gray-900 dark:text-white">
-                Dependency Graph
-              </h3>
-              <div class="graph-controls">
-                <select id="layout-select" onchange="changeLayout(this.value)"
-                  class="control-btn cursor-pointer">
-                  <option value="dagre">Dagre Layout</option>
-                  <option value="cose">Cose Layout</option>
-                  <option value="circle">Circle Layout</option>
-                  <option value="grid">Grid Layout</option>
-                  <option value="breadthfirst">Breadthfirst</option>
-                </select>
-                <input type="text" id="graph-search" placeholder="Search field..."
-                  oninput="searchGraph(this.value)"
-                  class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  style="min-width: 200px;" />
-                <button onclick="resetGraph()" class="control-btn">
-                  <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">refresh</span>
-                  Reset
-                </button>
-                <button onclick="fitGraph()" class="control-btn">
-                  <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">fit_screen</span>
-                  Fit
-                </button>
+        </div>
+
+        <!-- Main Content -->
+        <main class="flex-grow p-4 sm:p-6 lg:p-8">
+          <div class="mx-auto max-w-7xl">
+            <div class="mb-8 flex items-end justify-between">
+              <div>
+                <h2 class="text-3xl font-black tracking-tight text-gray-900 dark:text-white">
+                  Workbook Analysis
+                </h2>
+                <p id="stats" class="text-sm text-gray-500 dark:text-gray-400 mt-2 hidden font-medium"></p>
               </div>
             </div>
-            <div id="graph-container" class="relative"
-              style="height: 600px; border-radius: 0.5rem; overflow: hidden;">
-              <div id="cy"></div>
-              <div id="graph-placeholder"
-                class="absolute inset-0 flex items-center justify-center bg-gray-50/50 dark:bg-gray-900/50 rounded-lg">
-                <div class="text-center text-gray-400 dark:text-gray-500">
-                  <span class="material-symbols-outlined text-5xl">account_tree</span>
-                  <p class="mt-2 font-medium">Graph will be generated here</p>
-                  <p class="text-sm">Upload a workbook to visualize dependencies.</p>
+
+            <div class="flex flex-col gap-6">
+              <!-- Fields Table (Top) -->
+              <div class="flex flex-col gap-6 glass-card rounded-2xl p-6">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary-500">list</span>
+                    Parsed Fields
+                  </h3>
+                  <div class="relative">
+                    <span
+                      class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">search</span>
+                    <input type="text" id="search-input" placeholder="Search..."
+                      class="pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white transition-all w-40 focus:w-60"
+                      oninput="filterTable()" />
+                  </div>
+                </div>
+
+                <div
+                  class="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/50">
+                  <div class="overflow-x-auto h-[600px]">
+                    <table id="fields-table" class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead class="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
+                        <tr>
+                          <th onclick="sortTable(0)"
+                            class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Name ▼</th>
+                          <th onclick="sortTable(1)"
+                            class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Type</th>
+                          <th onclick="sortTable(2)"
+                            class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Role</th>
+                          <th onclick="sortTable(3)"
+                            class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Source</th>
+                          <th
+                            class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Formula</th>
+                          <th
+                            class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            ID</th>
+                        </tr>
+                      </thead>
+                      <tbody id="table-body"
+                        class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
+                        <!-- Rows will be populated by JS -->
+                        <tr class="animate-pulse">
+                          <td class="px-4 py-4" colspan="6">
+                            <div class="flex flex-col items-center justify-center py-12 text-gray-400">
+                              <span class="material-symbols-outlined text-4xl mb-2 opacity-50">table_rows</span>
+                              <p>Upload a file to see fields</p>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Dependency Graph (Bottom) -->
+              <div class="flex flex-col gap-6 glass-card rounded-2xl p-6">
+                <div class="flex items-center justify-between flex-wrap gap-4">
+                  <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary-500">hub</span>
+                    Dependency Graph
+                  </h3>
+                  <div class="graph-controls flex gap-2">
+                    <select id="layout-select" onchange="changeLayout(this.value)"
+                      class="px-3 py-1.5 text-sm font-medium border border-gray-200 rounded-lg bg-white hover:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer transition-colors">
+                      <option value="dagre">Dagre (Tree)</option>
+                      <option value="cose">Cose (Force)</option>
+                      <option value="circle">Circle</option>
+                      <option value="grid">Grid</option>
+                      <option value="breadthfirst">Breadthfirst</option>
+                    </select>
+                    <button onclick="resetGraph()"
+                      class="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+                      title="Reset View">
+                      <span class="material-symbols-outlined">refresh</span>
+                    </button>
+                    <button onclick="fitGraph()"
+                      class="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+                      title="Fit to Screen">
+                      <span class="material-symbols-outlined">fit_screen</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  class="relative flex-grow min-h-[600px] rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden">
+                  <div id="cy" class="absolute inset-0"></div>
+
+                  <!-- Search Overlay -->
+                  <div class="absolute top-4 right-4 z-10">
+                    <div class="relative shadow-lg rounded-lg">
+                      <span
+                        class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">search</span>
+                      <input type="text" id="graph-search" placeholder="Search graph..."
+                        oninput="searchGraph(this.value)"
+                        class="pl-9 pr-3 py-2 text-sm border-none rounded-lg bg-white/90 backdrop-blur focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-800/90 dark:text-white w-48 transition-all focus:w-64" />
+                    </div>
+                  </div>
+
+                  <div id="graph-placeholder"
+                    class="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm z-0">
+                    <div class="text-center text-gray-400 dark:text-gray-500">
+                      <div
+                        class="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                        <span class="material-symbols-outlined text-5xl opacity-50">account_tree</span>
+                      </div>
+                      <h4 class="text-lg font-bold text-gray-900 dark:text-white">Graph Visualization</h4>
+                      <p class="text-sm mt-1 max-w-xs mx-auto">Upload a workbook to visualize field dependencies and
+                        calculations.</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    </main>
-  </div>
-
-
-
-  <script>
-    let parsedData = {
-      workbookName: '',
-      fields: [],
-      dependencies: [],
-      dataSources: []
-    };
-
-    let currentMode = 'tbexport';
-    let sortOrder = { column: -1, ascending: true };
-    let cy = null; // Cytoscape instance
-    let currentLayout = 'dagre';
-
-    // Initialize Cytoscape extensions when page loads
-    document.addEventListener('DOMContentLoaded', function() {
-      // Register dagre layout
-      if (typeof cytoscape !== 'undefined' && typeof cytoscapeDagre !== 'undefined') {
-        cytoscape.use(cytoscapeDagre);
-      }
-    });
-
-    // Mode Switching
-    function switchMode(mode) {
-      currentMode = mode;
-      const tbBtn = document.getElementById('btn-tbexport');
-      const tflBtn = document.getElementById('btn-tflexport');
-
-      if (mode === 'tbexport') {
-        tbBtn.className = 'flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-accent px-4 text-sm font-bold text-white transition-colors hover:bg-accent/90';
-        tflBtn.className = 'flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-100 px-4 text-sm font-bold text-gray-800 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600';
-      } else {
-        tflBtn.className = 'flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-accent px-4 text-sm font-bold text-white transition-colors hover:bg-accent/90';
-        tbBtn.className = 'flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-100 px-4 text-sm font-bold text-gray-800 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600';
-      }
-    }
-
-    // Drag & Drop
-    const dropzone = document.getElementById('dropzone');
-    dropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      dropzone.classList.add('border-accent', 'bg-accent/5');
-    });
-
-    dropzone.addEventListener('dragleave', () => {
-      dropzone.classList.remove('border-accent', 'bg-accent/5');
-    });
-
-    dropzone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dropzone.classList.remove('border-accent', 'bg-accent/5');
-      const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        handleFile(files[0]);
-      }
-    });
-
-    function handleFileSelect(event) {
-      const file = event.target.files[0];
-      if (file) {
-        handleFile(file);
-      }
-    }
-
-    async function handleFile(file) {
-      const fileName = file.name;
-      const extension = fileName.split('.').pop().toLowerCase();
-
-      if (!['twb', 'twbx'].includes(extension)) {
-        alert('Please upload a valid Tableau workbook file (.twb or .twbx)');
-        return;
-      }
-
-      parsedData.workbookName = fileName;
-
-      try {
-        let xmlContent;
-
-        if (extension === 'twb') {
-          xmlContent = await file.text();
-        } else if (extension === 'twbx') {
-          const zip = await JSZip.loadAsync(file);
-          const twbFile = Object.keys(zip.files).find(f => f.endsWith('.twb'));
-          if (!twbFile) {
-            alert('No .twb file found in the .twbx archive');
-            return;
-          }
-          xmlContent = await zip.file(twbFile).async('text');
-        }
-
-        parseWorkbook(xmlContent);
-      } catch (error) {
-        console.error('Error processing file:', error);
-        alert('Error processing file: ' + error.message);
-      }
-    }
-
-    function parseWorkbook(xmlContent) {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
-
-      // Check for parsing errors
-      const parserError = xmlDoc.querySelector('parsererror');
-      if (parserError) {
-        alert('Error parsing XML: ' + parserError.textContent);
-        return;
-      }
-
-      // Extract fields from all datasources
-      const datasources = xmlDoc.querySelectorAll('datasource');
-      parsedData.fields = [];
-      parsedData.dataSources = [];
-      const tempFields = []; // Temporary array to store all fields before deduplication
-
-      // First pass: collect all fields
-      datasources.forEach(datasource => {
-        const dsName = datasource.getAttribute('name') || datasource.getAttribute('caption') || 'Unknown';
-        if (dsName !== 'Parameters' && !parsedData.dataSources.includes(dsName)) {
-          parsedData.dataSources.push(dsName);
-        }
-
-        const columns = datasource.querySelectorAll('column');
-        columns.forEach(column => {
-          const caption = column.getAttribute('caption');
-          const nameAttr = column.getAttribute('name') || '';
-          const displayName = caption || nameAttr;
-          const fieldId = nameAttr;
-          const datatype = column.getAttribute('datatype') || 'unknown';
-          const role = column.getAttribute('role') || '';
-
-          // Skip fields without proper role and caption (these are usually internal/duplicate definitions)
-          if (!role && !caption) {
-            return; // Skip this field
-          }
-
-          // Check if it's a calculated field
-          const calculationNode = column.querySelector('calculation');
-          const isCalculated = calculationNode !== null;
-          const rawFormula = isCalculated ? calculationNode.getAttribute('formula') : '';
-
-          // Determine field type
-          let fieldType = role === 'dimension' ? 'Dimension' : role === 'measure' ? 'Measure' : 'Unknown';
-          if (isCalculated) {
-            fieldType = 'Calculated Field';
-          }
-
-          // Clean up display name - remove brackets if present
-          const cleanName = displayName.replace(/^\[|\]$/g, '');
-
-          tempFields.push({
-            name: cleanName,
-            dataType: datatype,
-            fieldType: fieldType,
-            dataSource: dsName,
-            rawFormula: rawFormula,
-            formula: '',
-            fieldId: fieldId,
-            isCalculated: isCalculated,
-            hasCaption: !!caption,
-            hasRole: !!role
-          });
-        });
-      });
-
-      // Deduplicate fields: prefer fields with caption and role over those without
-      const fieldMap = new Map();
-      tempFields.forEach(field => {
-        const key = field.name.toLowerCase();
-        const existing = fieldMap.get(key);
-
-        if (!existing) {
-          fieldMap.set(key, field);
-        } else {
-          // Prefer field with caption and valid role
-          if (field.hasCaption && field.fieldType !== 'Unknown') {
-            fieldMap.set(key, field);
-          } else if (!existing.hasCaption && field.hasCaption) {
-            fieldMap.set(key, field);
-          } else if (existing.fieldType === 'Unknown' && field.fieldType !== 'Unknown') {
-            fieldMap.set(key, field);
-          }
-        }
-      });
-
-      // Convert map back to array and filter out Unknown types
-      parsedData.fields = Array.from(fieldMap.values()).filter(field => field.fieldType !== 'Unknown');
-
-      // Clean up temporary properties
-      parsedData.fields.forEach(field => {
-        delete field.hasCaption;
-        delete field.hasRole;
-      });
-
-      // Second pass: replace field IDs in formulas with captions
-      replaceFormulaFieldIds();
-
-      // Analyze dependencies
-      analyzeDependencies();
-
-      // Update UI
-      renderTable();
-      renderGraph();
-      updateStats();
-      enableExportButtons();
-    }
-
-    function replaceFormulaFieldIds() {
-      // Create a map of field ID to caption
-      const fieldIdToCaption = new Map();
-
-      parsedData.fields.forEach(field => {
-        if (field.fieldId) {
-          fieldIdToCaption.set(field.fieldId, field.name);
-          // Also store without brackets
-          const withoutBrackets = field.fieldId.replace(/^\[|\]$/g, '');
-          fieldIdToCaption.set(withoutBrackets, field.name);
-        }
-      });
-
-      // Replace field IDs in formulas
-      parsedData.fields.forEach(field => {
-        if (field.rawFormula) {
-          let formula = field.rawFormula;
-
-          // Decode HTML entities
-          formula = formula
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&amp;/g, '&')
-            .replace(/&apos;/g, "'")
-            .replace(/&quot;/g, '"')
-            .replace(/&#10;/g, '\n');
-
-          // Find all field references [...]
-          const regex = /\[([^\]]+)\]/g;
-          formula = formula.replace(regex, (match, fieldRef) => {
-            // Try to find the caption for this field ID
-            const caption = fieldIdToCaption.get(`[${fieldRef}]`) || fieldIdToCaption.get(fieldRef);
-            if (caption) {
-              return `[${caption}]`;
-            }
-            return match; // Keep original if not found
-          });
-
-          field.formula = formula;
-        }
-      });
-    }
-
-    function analyzeDependencies() {
-      parsedData.dependencies = [];
-      const fieldMap = new Map();
-
-      // Create a map of field names and IDs to fields
-      parsedData.fields.forEach(field => {
-        fieldMap.set(field.name, field);
-        if (field.fieldId) {
-          fieldMap.set(field.fieldId, field);
-        }
-      });
-
-      // Find dependencies in calculated fields
-      parsedData.fields.forEach(field => {
-        if (field.isCalculated && field.formula) {
-          // Extract field references from formula - they are in brackets [FieldName]
-          const regex = /\[([^\]]+)\]/g;
-          let match;
-          const dependencies = new Set();
-
-          while ((match = regex.exec(field.formula)) !== null) {
-            const refName = match[1];
-
-            // Try to find the referenced field
-            let refField = fieldMap.get(refName);
-
-            // If not found by exact match, try to find by caption
-            if (!refField) {
-              refField = parsedData.fields.find(f =>
-                f.name === refName ||
-                f.fieldId === `[${refName}]` ||
-                f.fieldId.includes(refName)
-              );
-            }
-
-            if (refField && refField.name !== field.name) {
-              dependencies.add(refField.name);
-            }
-          }
-
-          // Add dependencies
-          dependencies.forEach(depName => {
-            parsedData.dependencies.push({
-              from: depName,
-              to: field.name
-            });
-          });
-        }
-      });
-    }
-
-    function renderTable() {
-      const tbody = document.getElementById('table-body');
-      tbody.innerHTML = '';
-
-      parsedData.fields.forEach(field => {
-        const row = document.createElement('tr');
-        row.className = 'hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer';
-        row.setAttribute('data-field-name', field.name);
-        row.onclick = function() {
-          highlightFieldInGraph(field.name);
-        };
-
-        // Determine display field type
-        const isParameter = field.dataSource === 'Parameters';
-        const displayFieldType = isParameter ? 'Parameter' : field.fieldType;
-
-        row.innerHTML = `
-          <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-            ${escapeHtml(field.name)}
-          </td>
-          <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-              ${escapeHtml(field.dataType)}
-            </span>
-          </td>
-          <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getFieldTypeColor(displayFieldType)}">
-              ${escapeHtml(displayFieldType)}
-            </span>
-          </td>
-          <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-            ${escapeHtml(field.dataSource)}
-          </td>
-          <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate" title="${escapeHtml(field.formula)}">
-            ${field.formula ? escapeHtml(field.formula) : '-'}
-          </td>
-          <td class="px-4 py-3 text-xs text-gray-400 dark:text-gray-500 max-w-xs truncate font-mono" title="${escapeHtml(field.fieldId)}">
-            ${field.fieldId ? escapeHtml(field.fieldId) : '-'}
-          </td>
-        `;
-        tbody.appendChild(row);
-      });
-    }
-
-    function highlightFieldInGraph(fieldName) {
-      if (!cy) return;
-
-      // Find the node
-      const node = cy.getElementById(fieldName);
-      if (node.length === 0) {
-        // Field not in graph (no dependencies)
-        alert(`Field "${fieldName}" is not in the dependency graph`);
-        return;
-      }
-
-      // Reset all
-      cy.elements().removeClass('highlighted dimmed');
-
-      // Get all connected edges and nodes (both incoming and outgoing)
-      const connectedEdges = node.connectedEdges();
-      const connectedNodes = connectedEdges.connectedNodes();
-
-      // Dim everything
-      cy.elements().addClass('dimmed');
-
-      // Highlight selected node and its dependency chain
-      node.removeClass('dimmed').addClass('highlighted');
-      connectedEdges.removeClass('dimmed').addClass('highlighted');
-      connectedNodes.removeClass('dimmed').addClass('highlighted');
-
-      // Fit view to the highlighted subgraph
-      const elementsToFit = node.union(connectedEdges).union(connectedNodes);
-      cy.fit(elementsToFit, 50);
-
-      // Scroll to graph
-      document.getElementById('graph-container').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    function renderGraph() {
-      // Hide placeholder
-      const placeholder = document.getElementById('graph-placeholder');
-
-      if (parsedData.dependencies.length === 0) {
-        placeholder.innerHTML = `
-          <div class="text-center text-gray-400 dark:text-gray-500">
-            <span class="material-symbols-outlined text-5xl">account_tree</span>
-            <p class="mt-2 font-medium">No dependencies found</p>
-            <p class="text-sm">This workbook has no calculated fields with dependencies.</p>
-          </div>
-        `;
-        placeholder.style.display = 'flex';
-        return;
-      }
-
-      placeholder.style.display = 'none';
-
-      // Build Cytoscape elements
-      const elements = [];
-      const nodesInGraph = new Set();
-
-      // Collect all nodes involved in dependencies
-      parsedData.dependencies.forEach(dep => {
-        nodesInGraph.add(dep.from);
-        nodesInGraph.add(dep.to);
-      });
-
-      // Create node elements
-      const fieldMap = new Map();
-      parsedData.fields.forEach(field => {
-        fieldMap.set(field.name, field);
-      });
-
-      nodesInGraph.forEach(nodeName => {
-        const field = fieldMap.get(nodeName);
-        if (field) {
-          let nodeShape = 'roundrectangle';
-          let nodeColor = '#94A3B8'; // default gray
-          let borderColor = '#64748B';
-          let fieldTypeClass = 'unknown';
-
-          // Determine if it's a parameter (from Parameters datasource)
-          const isParameter = field.dataSource === 'Parameters';
-
-          if (isParameter) {
-            // Purple for Parameters
-            nodeColor = '#A855F7';
-            borderColor = '#9333EA';
-            fieldTypeClass = 'parameter';
-          } else if (field.fieldType === 'Dimension') {
-            // Blue for Dimensions
-            nodeColor = '#3B82F6';
-            borderColor = '#2563EB';
-            fieldTypeClass = 'dimension';
-          } else if (field.fieldType === 'Measure') {
-            // Green for Measures
-            nodeColor = '#10B981';
-            borderColor = '#059669';
-            fieldTypeClass = 'measure';
-          } else if (field.fieldType === 'Calculated Field') {
-            // Orange for Calculated Fields (now roundrectangle, not diamond)
-            nodeColor = '#F59E0B';
-            borderColor = '#D97706';
-            fieldTypeClass = 'calculated-field';
-          }
-
-          elements.push({
-            data: {
-              id: nodeName,
-              label: nodeName.length > 25 ? nodeName.substring(0, 22) + '...' : nodeName,
-              fullName: nodeName,
-              fieldType: isParameter ? 'Parameter' : field.fieldType,
-              dataType: field.dataType,
-              dataSource: field.dataSource,
-              formula: field.formula
-            },
-            classes: fieldTypeClass,
-            style: {
-              'background-color': nodeColor,
-              'border-color': borderColor,
-              'shape': nodeShape
-            }
-          });
-        }
-      });
-
-      // Create edge elements
-      parsedData.dependencies.forEach(dep => {
-        elements.push({
-          data: {
-            id: `${dep.from}-${dep.to}`,
-            source: dep.from,
-            target: dep.to
-          }
-        });
-      });
-
-      // Initialize or update Cytoscape
-      if (cy) {
-        cy.destroy();
-      }
-
-      cy = cytoscape({
-        container: document.getElementById('cy'),
-        elements: elements,
-        style: [
-          {
-            selector: 'node',
-            style: {
-              'label': 'data(label)',
-              'text-valign': 'center',
-              'text-halign': 'center',
-              'color': '#fff',
-              'font-size': '12px',
-              'font-weight': 'bold',
-              'text-wrap': 'wrap',
-              'text-max-width': '120px',
-              'width': 'label',
-              'height': 'label',
-              'padding': '12px',
-              'border-width': '2px',
-              'border-opacity': 1,
-              'min-width': '60px',
-              'min-height': '40px',
-              'shape': 'roundrectangle'
-            }
-          },
-          {
-            selector: 'node.dimension',
-            style: {
-              'background-color': '#3B82F6',
-              'border-color': '#2563EB'
-            }
-          },
-          {
-            selector: 'node.measure',
-            style: {
-              'background-color': '#10B981',
-              'border-color': '#059669'
-            }
-          },
-          {
-            selector: 'node.calculated-field',
-            style: {
-              'background-color': '#F59E0B',
-              'border-color': '#D97706'
-            }
-          },
-          {
-            selector: 'node.parameter',
-            style: {
-              'background-color': '#A855F7',
-              'border-color': '#9333EA'
-            }
-          },
-          {
-            selector: 'edge',
-            style: {
-              'width': 2,
-              'line-color': '#94A3B8',
-              'target-arrow-color': '#94A3B8',
-              'target-arrow-shape': 'triangle',
-              'curve-style': 'bezier',
-              'arrow-scale': 1.2
-            }
-          },
-          {
-            selector: 'node:selected',
-            style: {
-              'border-width': '4px',
-              'border-color': '#EF4444',
-              'overlay-opacity': 0.3,
-              'overlay-color': '#EF4444'
-            }
-          },
-          {
-            selector: 'edge.highlighted',
-            style: {
-              'line-color': '#EF4444',
-              'target-arrow-color': '#EF4444',
-              'width': 3
-            }
-          },
-          {
-            selector: 'node.highlighted',
-            style: {
-              'border-width': '4px',
-              'border-color': '#EF4444'
-            }
-          },
-          {
-            selector: 'node.dimmed',
-            style: {
-              'opacity': 0.3
-            }
-          },
-          {
-            selector: 'edge.dimmed',
-            style: {
-              'opacity': 0.15
-            }
-          }
-        ],
-        layout: {
-          name: currentLayout,
-          rankDir: 'TB', // Top to Bottom for dagre
-          nodeSep: 100,
-          rankSep: 150,
-          animate: true,
-          animationDuration: 500
-        }
-      });
-
-      // Add tooltip on hover
-      cy.on('mouseover', 'node', function (evt) {
-        const node = evt.target;
-        const data = node.data();
-
-        // Create tooltip
-        let tooltipContent = `
-          <div style="position: absolute; background: rgba(0,0,0,0.9); color: white; padding: 12px; border-radius: 8px; font-size: 12px; pointer-events: none; z-index: 1000; max-width: 300px;">
-            <div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">${data.fullName}</div>
-            <div style="margin-bottom: 4px;"><strong>Type:</strong> ${data.fieldType}</div>
-            <div style="margin-bottom: 4px;"><strong>Data Type:</strong> ${data.dataType}</div>
-            <div style="margin-bottom: 4px;"><strong>Source:</strong> ${data.dataSource}</div>
-            ${data.formula ? `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2);"><strong>Formula:</strong><br><code style="font-size: 11px; display: block; margin-top: 4px; white-space: pre-wrap; word-break: break-all;">${data.formula.substring(0, 200)}${data.formula.length > 200 ? '...' : ''}</code></div>` : ''}
-          </div>
-        `;
-
-        const tooltip = document.createElement('div');
-        tooltip.id = 'cy-tooltip';
-        tooltip.innerHTML = tooltipContent;
-        document.body.appendChild(tooltip);
-
-        const updateTooltipPosition = (e) => {
-          const tt = document.getElementById('cy-tooltip');
-          if (tt) {
-            tt.style.left = (e.pageX + 15) + 'px';
-            tt.style.top = (e.pageY + 15) + 'px';
-          }
-        };
-
-        document.addEventListener('mousemove', updateTooltipPosition);
-        node.data('mousemoveHandler', updateTooltipPosition);
-      });
-
-      cy.on('mouseout', 'node', function (evt) {
-        const tooltip = document.getElementById('cy-tooltip');
-        if (tooltip) {
-          tooltip.remove();
-        }
-        const handler = evt.target.data('mousemoveHandler');
-        if (handler) {
-          document.removeEventListener('mousemove', handler);
-        }
-      });
-
-      // Highlight dependencies on click
-      cy.on('tap', 'node', function (evt) {
-        const node = evt.target;
-
-        // Reset all
-        cy.elements().removeClass('highlighted dimmed');
-
-        // Get connected edges and nodes
-        const connected = node.connectedEdges();
-        const connectedNodes = connected.connectedNodes();
-
-        // Dim everything
-        cy.elements().addClass('dimmed');
-
-        // Highlight selected node and connected elements
-        node.removeClass('dimmed').addClass('highlighted');
-        connected.removeClass('dimmed').addClass('highlighted');
-        connectedNodes.removeClass('dimmed').addClass('highlighted');
-      });
-
-      // Click on background to reset
-      cy.on('tap', function (evt) {
-        if (evt.target === cy) {
-          cy.elements().removeClass('highlighted dimmed');
-        }
-      });
-
-      // Enable panning and zooming
-      cy.userPanningEnabled(true);
-      cy.userZoomingEnabled(true);
-      cy.boxSelectionEnabled(false);
-    }
-
-    function changeLayout(layoutName) {
-      if (!cy) return;
-
-      currentLayout = layoutName;
-
-      let layoutOptions = {
-        name: layoutName,
-        animate: true,
-        animationDuration: 500
-      };
-
-      // Specific options for different layouts
-      if (layoutName === 'dagre') {
-        layoutOptions.rankDir = 'TB'; // Top to Bottom
-        layoutOptions.nodeSep = 100;
-        layoutOptions.rankSep = 150;
-      } else if (layoutName === 'cose') {
-        // Optimized Cose parameters for better spacing
-        layoutOptions.nodeRepulsion = 20000; // Increased from 8000
-        layoutOptions.idealEdgeLength = 150; // Increased from 100
-        layoutOptions.edgeElasticity = 100;
-        layoutOptions.numIter = 2000; // More iterations for stability
-        layoutOptions.gravity = 1;
-        layoutOptions.nodeOverlap = 20;
-      } else if (layoutName === 'breadthfirst') {
-        layoutOptions.directed = true;
-        layoutOptions.spacingFactor = 1.5;
-      }
-
-      const layout = cy.layout(layoutOptions);
-      layout.run();
-    }
-
-    function searchGraph(searchTerm) {
-      if (!cy) return;
-
-      cy.elements().removeClass('highlighted dimmed');
-
-      if (!searchTerm) return;
-
-      const term = searchTerm.toLowerCase();
-      const matchedNodes = cy.nodes().filter(node => {
-        return node.data('fullName').toLowerCase().includes(term);
-      });
-
-      if (matchedNodes.length > 0) {
-        // Dim everything
-        cy.elements().addClass('dimmed');
-
-        // Highlight matched nodes and their connections
-        matchedNodes.forEach(node => {
-          node.removeClass('dimmed').addClass('highlighted');
-          const connected = node.connectedEdges();
-          const connectedNodes = connected.connectedNodes();
-          connected.removeClass('dimmed').addClass('highlighted');
-          connectedNodes.removeClass('dimmed').addClass('highlighted');
-        });
-
-        // Fit to matched nodes
-        cy.fit(matchedNodes, 50);
-      }
-    }
-
-    function resetGraph() {
-      if (!cy) return;
-
-      cy.elements().removeClass('highlighted dimmed');
-      cy.fit();
-      document.getElementById('graph-search').value = '';
-    }
-
-    function fitGraph() {
-      if (!cy) return;
-      cy.fit();
-    }
-
-    function getFieldTypeColor(fieldType) {
-      switch (fieldType) {
-        case 'Dimension':
-          return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-        case 'Measure':
-          return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-        case 'Calculated Field':
-          return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-        case 'Parameter':
-          return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
-        default:
-          return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
-      }
-    }
-
-    function updateStats() {
-      const stats = document.getElementById('stats');
-      const calcFields = parsedData.fields.filter(f => f.isCalculated).length;
-      stats.textContent = `Parsed ${parsedData.fields.length} fields from ${parsedData.dataSources.length} data source(s). ${calcFields} calculated field(s) with ${parsedData.dependencies.length} dependencies.`;
-      stats.classList.remove('hidden');
-    }
-
-    function enableExportButtons() {
-      document.getElementById('btn-export-fields').disabled = false;
-      document.getElementById('btn-export-graph').disabled = false;
-    }
-
-    // Export Functions
-    function exportFields() {
-      // Create export dialog
-      const dialog = document.createElement('div');
-      dialog.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
-      dialog.innerHTML = `
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
-          <h3 class="text-xl font-bold mb-4 text-gray-900 dark:text-white">Export Fields</h3>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">Choose export format:</p>
-          <div class="flex gap-3">
-            <button onclick="exportToExcel(); closeDialog()"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-success text-white rounded-lg hover:bg-success/90 transition-colors">
-              <span class="material-symbols-outlined">table_chart</span>
-              <span>Excel (.xlsx)</span>
-            </button>
-            <button onclick="exportToJSON(); closeDialog()"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors">
-              <span class="material-symbols-outlined">code</span>
-              <span>JSON (.json)</span>
-            </button>
-          </div>
-          <button onclick="closeDialog()"
-            class="mt-4 w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
-            Cancel
-          </button>
-        </div>
-      `;
-      document.body.appendChild(dialog);
-      window.currentDialog = dialog;
-    }
-
-    function closeDialog() {
-      if (window.currentDialog) {
-        window.currentDialog.remove();
-        window.currentDialog = null;
-      }
-    }
-
-    function exportToExcel() {
-      const ws_data = [
-        ['Name', 'Data Type', 'Field Type', 'Data Source', 'Formula', 'Field ID']
-      ];
-
-      parsedData.fields.forEach(field => {
-        ws_data.push([
-          field.name,
-          field.dataType,
-          field.fieldType,
-          field.dataSource,
-          field.formula,
-          field.fieldId
-        ]);
-      });
-
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(ws_data);
-
-      // Set column widths
-      ws['!cols'] = [
-        { wch: 30 },
-        { wch: 15 },
-        { wch: 20 },
-        { wch: 25 },
-        { wch: 50 },
-        { wch: 40 }
-      ];
-
-      XLSX.utils.book_append_sheet(wb, ws, 'Fields');
-
-      const fileName = parsedData.workbookName.replace(/\.(twb|twbx)$/, '_fields.xlsx');
-      XLSX.writeFile(wb, fileName);
-    }
-
-    function exportToJSON() {
-      const exportData = {
-        workbook_name: parsedData.workbookName,
-        parsed_at: new Date().toISOString(),
-        fields: parsedData.fields,
-        dependencies: parsedData.dependencies,
-        statistics: {
-          total_fields: parsedData.fields.length,
-          calculated_fields: parsedData.fields.filter(f => f.isCalculated).length,
-          data_sources: parsedData.dataSources.length,
-          dependencies: parsedData.dependencies.length
-        }
-      };
-
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = parsedData.workbookName.replace(/\.(twb|twbx)$/, '_fields.json');
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    function exportGraph() {
-      // Create export dialog
-      const dialog = document.createElement('div');
-      dialog.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
-      dialog.innerHTML = `
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
-          <h3 class="text-xl font-bold mb-4 text-gray-900 dark:text-white">Export Graph</h3>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">Choose export format and quality:</p>
-
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">PNG Resolution:</label>
-            <select id="png-resolution" class="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-              <option value="2">2x (High Quality)</option>
-              <option value="3">3x (Ultra Quality)</option>
-              <option value="1">1x (Standard)</option>
-            </select>
-          </div>
-
-          <div class="flex gap-3">
-            <button onclick="exportToPNG(document.getElementById('png-resolution').value); closeDialog()"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-success text-white rounded-lg hover:bg-success/90 transition-colors">
-              <span class="material-symbols-outlined">image</span>
-              <span>PNG</span>
-            </button>
-            <button onclick="exportToSVG(); closeDialog()"
-              class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors">
-              <span class="material-symbols-outlined">vector_square</span>
-              <span>SVG</span>
-            </button>
-          </div>
-          <button onclick="closeDialog()"
-            class="mt-4 w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
-            Cancel
-          </button>
-        </div>
-      `;
-      document.body.appendChild(dialog);
-      window.currentDialog = dialog;
-    }
-
-    function exportToPNG(scale) {
-      if (!cy) {
-        alert('No graph to export');
-        return;
-      }
-
-      scale = scale || 2; // Default to 2x
-
-      // Use Cytoscape's built-in PNG export
-      const pngData = cy.png({
-        output: 'blob-promise',
-        bg: '#f9fafb',
-        full: true,
-        scale: parseInt(scale)
-      });
-
-      pngData.then(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = parsedData.workbookName.replace(/\.(twb|twbx)$/, `_graph_${scale}x.png`);
-        a.click();
-        URL.revokeObjectURL(url);
-      });
-    }
-
-    function exportToSVG() {
-      if (!cy) {
-        alert('No graph to export');
-        return;
-      }
-
-      // Use html2canvas as fallback for SVG-like export
-      // Since cytoscape doesn't have native SVG export without additional plugin
-      const container = document.getElementById('cy');
-
-      html2canvas(container, {
-        backgroundColor: '#f9fafb',
-        scale: 2
-      }).then(canvas => {
-        // Convert to SVG-wrapped image
-        const imgData = canvas.toDataURL('image/png');
-        const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-     width="${canvas.width}" height="${canvas.height}" viewBox="0 0 ${canvas.width} ${canvas.height}">
-  <image width="${canvas.width}" height="${canvas.height}" xlink:href="${imgData}"/>
-</svg>`;
-
-        const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = parsedData.workbookName.replace(/\.(twb|twbx)$/, '_graph.svg');
-        a.click();
-        URL.revokeObjectURL(url);
-      });
-    }
-
-    // Table Filtering
-    function filterTable() {
-      const searchTerm = document.getElementById('search-input').value.toLowerCase();
-      const tbody = document.getElementById('table-body');
-      const rows = tbody.getElementsByTagName('tr');
-
-      for (let row of rows) {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(searchTerm) ? '' : 'none';
-      }
-    }
-
-    // Table Sorting
-    function sortTable(columnIndex) {
-      const tbody = document.getElementById('table-body');
-      const rows = Array.from(tbody.getElementsByTagName('tr'));
-
-      const isAscending = sortOrder.column === columnIndex ? !sortOrder.ascending : true;
-      sortOrder.column = columnIndex;
-      sortOrder.ascending = isAscending;
-
-      rows.sort((a, b) => {
-        const aText = a.cells[columnIndex].textContent.trim();
-        const bText = b.cells[columnIndex].textContent.trim();
-
-        if (aText < bText) return isAscending ? -1 : 1;
-        if (aText > bText) return isAscending ? 1 : -1;
-        return 0;
-      });
-
-      rows.forEach(row => tbody.appendChild(row));
-
-      // Update header indicators
-      const headers = document.querySelectorAll('.sortable');
-      headers.forEach((header, idx) => {
-        const text = header.textContent.replace(' ▼', '').replace(' ▲', '');
-        if (idx === columnIndex) {
-          header.textContent = text + (isAscending ? ' ▼' : ' ▲');
-        } else {
-          header.textContent = text;
-        }
-      });
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-  </script>
+        </main>
+
+        <!-- Footer Container -->
+        <div id="footer-container"></div>
+
+        <!-- Shared UI Logic -->
+        <script src="js/shared/ui.js"></script>
+        <!-- Analyzer Logic -->
+        <script src="js/analyzer.js"></script>
 </body>
 
 </html>

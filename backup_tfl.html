@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Tableau Prep Flow Analyzer</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "txi1uqiq8y");
+</script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#fada38",
+            "background-light": "#FFFBEB",
+            "background-dark": "#23200f",
+            "accent": "#3B82F6",
+            "success": "#10B981",
+            "error": "#EF4444",
+          },
+          fontFamily: {
+            "display": ["Work Sans", "Noto Sans", "sans-serif"]
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      font-size: 20px;
+    }
+  </style>
+</head>
+
+<body class="font-display bg-background-light dark:bg-background-dark text-[#333333] dark:text-gray-200">
+  <div class="relative flex min-h-screen w-full flex-col">
+    <!-- Header -->
+    <header
+      class="sticky top-0 z-20 w-full border-b border-solid border-[#E5E7EB] bg-white/80 dark:border-gray-700 dark:bg-background-dark/80 backdrop-blur-sm">
+      <div class="mx-auto flex max-w-7xl items-center justify-between whitespace-nowrap px-4 sm:px-6 lg:px-8 py-3">
+        <div class="flex items-center gap-3 text-[#1c1a0d] dark:text-gray-100">
+          <div class="text-accent size-6">
+            <svg fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm2 14h3v-3H6v3zm0-5h3V9H6v3zm0-5h3V4H6v3zm5 10h3v-3h-3v3zm0-5h3V9h-3v3zm0-5h3V4h-3v3zm5 10h3v-3h-3v3zm0-5h3V9h-3v3zm0-5h3V4h-3v3z">
+              </path>
+            </svg>
+          </div>
+          <h1 class="text-xl font-bold leading-tight tracking-tighter">
+            Tableau Prep Flow Analyzer
+          </h1>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="window.location.href='https://tableautools.imgwho.com'"
+            class="flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-100 px-4 text-sm font-bold text-gray-800 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
+            <span class="truncate">Twb_Analysis</span>
+          </button>
+          <button onclick="window.location.href='https://tableautools.imgwho.com/Twb_Docs.html'"
+            class="flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-100 px-4 text-sm font-bold text-gray-800 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
+            <span class="truncate">Twb_Docs</span>
+          </button>
+          <button
+            class="flex h-10 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-accent px-4 text-sm font-bold text-white transition-colors hover:bg-accent/90">
+            <span class="truncate">Tfl_Analysis</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Upload Bar -->
+    <div
+      class="sticky top-[61px] z-10 w-full border-b border-solid border-[#E5E7EB] bg-white dark:border-gray-700 dark:bg-gray-800">
+      <div class="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 py-3 gap-4">
+        <div id="drop-zone"
+          class="flex-grow flex items-center gap-3 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 p-2 text-center text-gray-500 dark:text-gray-400 min-h-[4rem] hover:border-accent/70 transition-colors cursor-pointer">
+          <span class="material-symbols-outlined text-3xl">upload_file</span>
+          <p class="text-sm font-medium">
+            Drag and drop Tableau Prep flow files (.tfl, .tflx) here or
+            <button onclick="event.stopPropagation(); document.getElementById('file-input').click()"
+              class="inline-flex h-9 min-w-0 max-w-fit cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-accent px-3 text-sm font-bold text-white transition-colors hover:bg-accent/90">
+              <span class="material-symbols-outlined text-base">folder_open</span>
+              <span class="truncate">Browse Files</span>
+            </button>
+          </p>
+          <input type="file" id="file-input" accept=".tfl,.tflx" multiple style="display: none;" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="flex-grow p-4 sm:p-6 lg:p-8">
+      <div class="mx-auto max-w-7xl">
+        <div class="mb-8">
+          <h2 class="text-3xl font-black tracking-[-0.033em] text-gray-900 dark:text-white">
+            Flow Analysis Dashboard
+          </h2>
+        </div>
+        <div id="results-container" class="grid grid-cols-1 gap-6">
+          <!-- Empty State - will be replaced when files are uploaded -->
+          <div
+            class="flex flex-col gap-6 rounded-xl border border-[#E5E7EB] bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+            <div
+              class="flex min-h-[30rem] lg:min-h-[40rem] items-center justify-center rounded-lg bg-gray-50/50 dark:bg-gray-900/50">
+              <div class="text-center text-gray-400 dark:text-gray-500">
+                <span class="material-symbols-outlined text-5xl">account_tree</span>
+                <p class="mt-2 font-medium">Waiting for flow file upload</p>
+                <p class="text-sm">Upload .tfl or .tflx files to analyze Tableau Prep flows</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+
+
+  <script>
+    // Initialize Mermaid
+    mermaid.initialize({ startOnLoad: false, theme: 'base', themeVariables: { 'primaryColor': '#f0f2f5' } });
+
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const resultsContainer = document.getElementById('results-container');
+
+    // --- Event Listeners ---
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('border-accent', 'bg-accent/5');
+    });
+    dropZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-accent', 'bg-accent/5');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-accent', 'bg-accent/5');
+      handleFiles(e.dataTransfer.files);
+    });
+
+    // --- Core Logic ---
+    async function handleFiles(files) {
+      if (files.length === 0) return;
+      resultsContainer.innerHTML = '';
+
+      for (const file of files) {
+        await processFile(file);
+      }
+
+      await mermaid.run();
+    }
+
+    function processFile(file) {
+      return new Promise((resolve) => {
+        const extension = file.name.split('.').pop().toLowerCase();
+        if (!['tfl', 'tflx'].includes(extension)) {
+          resolve();
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          JSZip.loadAsync(event.target.result)
+            .then(zip => {
+              const flowFile = zip.file('flow');
+              if (flowFile) return flowFile.async('string');
+              throw new Error("'flow' file not found in archive.");
+            })
+            .then(content => {
+              displayResult(content, file.name);
+              resolve();
+            })
+            .catch(error => {
+              displayError(file.name, error.message);
+              resolve();
+            });
+        };
+        reader.onerror = () => { displayError(file.name, "File read failed."); resolve(); };
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function generateExplanation(jsonData) {
+      let html = '';
+      const nodes = jsonData.nodes || {};
+      const getTableName = (node) => node.relation?.type === 'table' ? node.relation.table : `(Custom SQL: ${node.name})`;
+
+      const inputs = Object.values(nodes).filter(n => n.baseType === 'input');
+      if (inputs.length > 0) {
+        html += '<h4 class="text-lg font-bold text-gray-900 dark:text-white mb-3">📥 Data Sources (Inputs)</h4><ul class="space-y-2">';
+        inputs.forEach(input => {
+          html += `<li class="text-sm text-gray-700 dark:text-gray-300"><strong>${escapeHtml(input.name)}</strong>: Reading data from <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs">${escapeHtml(getTableName(input))}</code>.`;
+          if (input.fields?.length > 0) {
+            html += ` (${input.fields.length} fields)`;
+          }
+          html += '</li>';
+        });
+        html += '</ul>';
+      }
+
+      const joins = Object.values(nodes).filter(n => n.nodeType?.includes('Join') && n.actionNode?.conditions);
+      if (joins.length > 0) {
+        html += '<h4 class="text-lg font-bold text-gray-900 dark:text-white mb-3 mt-6">🔗 Data Joins (Joins)</h4><ul class="space-y-2">';
+        joins.forEach(join => {
+          const joinType = join.actionNode.joinType || 'unknown';
+          html += `<li class="text-sm text-gray-700 dark:text-gray-300"><strong>${escapeHtml(join.name)}</strong>: Executed a <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs">${joinType.toUpperCase()} JOIN</code></li>`;
+        });
+        html += '</ul>';
+      }
+
+      const outputs = Object.values(nodes).filter(n => n.baseType === 'output');
+      if (outputs.length > 0) {
+        html += '<h4 class="text-lg font-bold text-gray-900 dark:text-white mb-3 mt-6">📤 Data Outputs (Outputs)</h4><ul class="space-y-2">';
+        outputs.forEach(output => {
+          html += `<li class="text-sm text-gray-700 dark:text-gray-300">Publishing results as a data source named <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs">${escapeHtml(output.datasourceName || 'Unnamed')}</code>, located in project <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs">${escapeHtml(output.projectName || 'Default Project')}</code>.</li>`;
+        });
+        html += '</ul>';
+      }
+
+      return html || '<p class="text-sm text-gray-500">Failed to extract key summary information from this file.</p>';
+    }
+
+    function generateFlowchartSyntax(jsonData) {
+      let mermaidSyntax = 'graph TD\n';
+      const nodes = jsonData.nodes || {};
+      const nodeMap = new Map(Object.entries(nodes));
+
+      const safeId = (id) => id.replace(/-/g, '');
+      const safeLabel = (label) => label ? label.replace(/"/g, '#quot;') : 'Unnamed';
+
+      nodeMap.forEach((node, id) => {
+        const id_ = safeId(id);
+        const label_ = safeLabel(node.name);
+        if (node.baseType === 'input') mermaidSyntax += `    ${id_}[["📥 ${label_}"]]\n`;
+        else if (node.baseType === 'output') mermaidSyntax += `    ${id_}[("📤 ${label_}")]\n`;
+        else if (node.nodeType?.includes('Join')) mermaidSyntax += `    ${id_}{{"🔗 ${label_}"}}\n`;
+        else mermaidSyntax += `    ${id_}["⚙️ ${label_}"]\n`;
+      });
+
+      nodeMap.forEach((node, id) => {
+        if (node.nextNodes) {
+          node.nextNodes.forEach(nextNode => {
+            mermaidSyntax += `    ${safeId(id)} --> ${safeId(nextNode.nextNodeId)}\n`;
+          });
+        }
+      });
+      return mermaidSyntax;
+    }
+
+    function displayResult(content, originalFileName) {
+      const baseName = originalFileName.replace(/\.(tfl|tflx)$/i, '');
+      const jsonFileName = `${baseName}.json`;
+
+      // Create card container
+      const card = document.createElement('div');
+      card.className = 'flex flex-col gap-6 rounded-xl border border-[#E5E7EB] bg-white p-6 dark:border-gray-700 dark:bg-gray-800';
+
+      // Card header with filename and download button
+      const header = document.createElement('div');
+      header.className = 'flex items-center justify-between';
+      header.innerHTML = `
+        <h3 class="text-xl font-bold leading-tight tracking-tight text-gray-900 dark:text-white">
+          ${escapeHtml(jsonFileName)}
+        </h3>
+        <button onclick="downloadJSON('${escapeHtml(originalFileName)}')"
+          class="flex h-10 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-gray-100 px-4 text-sm font-bold text-gray-800 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
+          <span class="material-symbols-outlined text-base">download</span>
+          <span class="truncate">Download JSON</span>
+        </button>
+      `;
+      card.appendChild(header);
+
+      let jsonObj;
+      try {
+        jsonObj = JSON.parse(content);
+      } catch (e) {
+        card.innerHTML += '<p class="text-sm text-red-600">Unable to parse JSON format</p>';
+        resultsContainer.appendChild(card);
+        return;
+      }
+
+      // Store for download
+      window.flowData = window.flowData || {};
+      window.flowData[originalFileName] = content;
+
+      // Summary section
+      const summaryDiv = document.createElement('div');
+      summaryDiv.className = 'rounded-lg border border-[#E5E7EB] dark:border-gray-700 p-4';
+      summaryDiv.innerHTML = `
+        <h4 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Summary Analysis</h4>
+        ${generateExplanation(jsonObj)}
+      `;
+      card.appendChild(summaryDiv);
+
+      // JSON viewer section
+      const jsonDiv = document.createElement('div');
+      jsonDiv.className = 'overflow-hidden rounded-lg border border-[#E5E7EB] dark:border-gray-700';
+      const jsonInner = document.createElement('div');
+      jsonInner.className = 'overflow-x-auto h-[30rem]';
+      const pre = document.createElement('pre');
+      pre.className = 'p-4 m-0';
+      const code = document.createElement('code');
+      code.className = 'language-json';
+      code.textContent = JSON.stringify(jsonObj, null, 2);
+      pre.appendChild(code);
+      jsonInner.appendChild(pre);
+      jsonDiv.appendChild(jsonInner);
+      card.appendChild(jsonDiv);
+
+      // Mermaid flowchart section
+      const flowchartDiv = document.createElement('div');
+      flowchartDiv.className = 'rounded-lg border border-[#E5E7EB] dark:border-gray-700 p-6';
+      flowchartDiv.innerHTML = '<h4 class="text-lg font-bold text-gray-900 dark:text-white mb-4">🗺️ Flow Diagram</h4>';
+      const mermaidDiv = document.createElement('div');
+      mermaidDiv.className = 'mermaid';
+      mermaidDiv.textContent = generateFlowchartSyntax(jsonObj);
+      flowchartDiv.appendChild(mermaidDiv);
+      card.appendChild(flowchartDiv);
+
+      resultsContainer.appendChild(card);
+
+      // Highlight code
+      Prism.highlightElement(code);
+    }
+
+    function displayError(fileName, message) {
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'flex flex-col gap-6 rounded-xl border border-red-200 bg-red-50 p-6 dark:border-red-900 dark:bg-red-900/20';
+      errorDiv.innerHTML = `
+        <div class="flex items-start gap-3">
+          <span class="material-symbols-outlined text-2xl text-red-600 dark:text-red-400">error</span>
+          <div>
+            <h3 class="font-bold text-red-900 dark:text-red-200">Failed to process ${escapeHtml(fileName)}</h3>
+            <p class="text-sm text-red-700 dark:text-red-300 mt-1">${escapeHtml(message)}</p>
+          </div>
+        </div>
+      `;
+      resultsContainer.appendChild(errorDiv);
+    }
+
+    function downloadJSON(fileName) {
+      if (!window.flowData || !window.flowData[fileName]) return;
+      const blob = new Blob([window.flowData[fileName]], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName.replace(/\.(tfl|tflx)$/i, '.json');
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+
+</html>
+
+
