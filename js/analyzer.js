@@ -297,6 +297,21 @@ function analyzeDependencies() {
     });
 }
 
+// Update statistics display
+function updateStats() {
+    const stats = document.getElementById('stats');
+    if (!stats) return;
+
+    const totalFields = parsedData.fields.length;
+    const calcFields = parsedData.fields.filter(f => f.isCalculated).length;
+    const dimensions = parsedData.fields.filter(f => f.role === 'dimension').length;
+    const measures = parsedData.fields.filter(f => f.role === 'measure').length;
+    const dependencies = parsedData.dependencies.length;
+
+    stats.textContent = `${totalFields} fields (${calcFields} calculated, ${dimensions} dimensions, ${measures} measures) • ${dependencies} dependencies`;
+    stats.classList.remove('hidden');
+}
+
 function renderTable() {
     const tbody = document.getElementById('table-body');
     tbody.innerHTML = '';
@@ -863,4 +878,57 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Enable export buttons after file is loaded
+function enableExportButtons() {
+    const btnExportFields = document.getElementById('btn-export-fields');
+    const btnExportGraph = document.getElementById('btn-export-graph');
+
+    if (btnExportFields) {
+        btnExportFields.disabled = false;
+    }
+    if (btnExportGraph) {
+        btnExportGraph.disabled = false;
+    }
+}
+
+// Export fields to Excel
+function exportFields() {
+    if (parsedData.fields.length === 0) {
+        showToast('No fields to export', 'info');
+        return;
+    }
+
+    // Prepare data for export
+    const exportData = parsedData.fields.map(field => ({
+        'Name': field.name,
+        'Type': field.fieldType,
+        'Role': field.role || '-',
+        'Data Source': field.dataSource,
+        'Formula': field.formula || '-',
+        'ID': field.fieldId || '-'
+    }));
+
+    // Create worksheet
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Fields');
+
+    // Export
+    const fileName = parsedData.workbookName.replace(/\.(twb|twbx)$/, '_fields.xlsx');
+    XLSX.writeFile(wb, fileName);
+    showToast(`Exported ${parsedData.fields.length} fields to ${fileName}`, 'success');
+}
+
+// Export graph as image
+function exportGraph() {
+    if (!cy || parsedData.dependencies.length === 0) {
+        showToast('No graph to export', 'info');
+        return;
+    }
+
+    // Export as PNG by default
+    exportToPNG(2);
+    showToast('Graph exported as PNG', 'success');
 }

@@ -56,11 +56,25 @@
             </p>
             <p id="stats" class="text-sm text-gray-500 dark:text-gray-400 mt-2 hidden font-medium"></p>
           </div>
+          <div class="flex gap-2">
+            <button id="btn-export-fields" onclick="exportFields()"
+              class="flex h-10 items-center justify-center gap-2 rounded-lg bg-white border border-gray-200 px-4 text-sm font-bold text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:text-primary-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled>
+              <span class="material-symbols-outlined text-lg">description</span>
+              <span class="hidden lg:inline">Export Fields</span>
+            </button>
+            <button id="btn-export-graph" onclick="exportGraph()"
+              class="flex h-10 items-center justify-center gap-2 rounded-lg bg-white border border-gray-200 px-4 text-sm font-bold text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:text-primary-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled>
+              <span class="material-symbols-outlined text-lg">image</span>
+              <span class="hidden lg:inline">Export Graph</span>
+            </button>
+          </div>
         </div>
 
         <!-- Upload Zone -->
-        <div
-          class="mb-8 rounded-2xl border-2 border-dashed border-gray-300 bg-white p-6 shadow-sm transition-all hover:border-primary-500 hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
+        <div id="dropzone" onclick="document.getElementById('file-input').click()"
+          class="mb-8 rounded-2xl border-2 border-dashed border-gray-300 bg-white p-6 shadow-sm transition-all hover:border-primary-500 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 cursor-pointer group">
           <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div class="flex items-center gap-4 w-full">
               <div
@@ -76,7 +90,7 @@
                   Drag &amp; drop .twb or .twbx files here
                 </p>
               </div>
-              <button onclick="document.getElementById('file-input').click()"
+              <button onclick="event.stopPropagation(); document.getElementById('file-input').click()"
                 class="hidden sm:inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary-500 px-4 text-sm font-bold text-white shadow-lg shadow-primary-500/20 transition-all hover:bg-primary-600 hover:shadow-primary-500/40 active:scale-95">
                 <span class="material-symbols-outlined text-lg">folder_open</span>
                 <span>Browse</span>
@@ -84,165 +98,138 @@
               <input type="file" id="file-input" accept=".twb,.twbx" style="display: none;"
                 onchange="handleFileSelect(event)" />
             </div>
-
-            <div class="flex gap-2">
-              <button id="btn-export-fields" onclick="exportFields()"
-                class="flex h-10 items-center justify-center gap-2 rounded-lg bg-white border border-gray-200 px-4 text-sm font-bold text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:text-primary-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled>
-                <span class="material-symbols-outlined text-lg">description</span>
-                <span class="hidden lg:inline">Export Fields</span>
-              </button>
-              <button id="btn-export-graph" onclick="exportGraph()"
-                class="flex h-10 items-center justify-center gap-2 rounded-lg bg-white border border-gray-200 px-4 text-sm font-bold text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:text-primary-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled>
-                <span class="material-symbols-outlined text-lg">image</span>
-                <span class="hidden lg:inline">Export Graph</span>
-              </button>
-            </div>
           </div>
         </div>
 
-        <!-- Main Content -->
-        <main class="flex-grow p-4 sm:p-6 lg:p-8">
-          <div class="mx-auto max-w-7xl">
-            <div class="mb-8 flex items-end justify-between">
-              <div>
-                <h2 class="text-3xl font-black tracking-tight text-gray-900 dark:text-white">
-                  Workbook Analysis
-                </h2>
-                <p id="stats" class="text-sm text-gray-500 dark:text-gray-400 mt-2 hidden font-medium"></p>
+        <!-- Fields and Graph -->
+        <div class="flex flex-col gap-6">
+          <!-- Fields Table (Top) -->
+          <div class="flex flex-col gap-6 glass-card rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary-500">list</span>
+                Parsed Fields
+              </h3>
+              <div class="relative">
+                <span
+                  class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">search</span>
+                <input type="text" id="search-input" placeholder="Search..."
+                  class="pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white transition-all w-40 focus:w-60"
+                  oninput="filterTable()" />
               </div>
             </div>
 
-            <div class="flex flex-col gap-6">
-              <!-- Fields Table (Top) -->
-              <div class="flex flex-col gap-6 glass-card rounded-2xl p-6">
-                <div class="flex items-center justify-between">
-                  <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <span class="material-symbols-outlined text-primary-500">list</span>
-                    Parsed Fields
-                  </h3>
-                  <div class="relative">
-                    <span
-                      class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">search</span>
-                    <input type="text" id="search-input" placeholder="Search..."
-                      class="pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white transition-all w-40 focus:w-60"
-                      oninput="filterTable()" />
-                  </div>
-                </div>
+            <div
+              class="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/50">
+              <div class="overflow-x-auto h-[600px]">
+                <table id="fields-table" class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead class="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
+                    <tr>
+                      <th onclick="sortTable(0)"
+                        class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Name ▼</th>
+                      <th onclick="sortTable(1)"
+                        class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Type</th>
+                      <th onclick="sortTable(2)"
+                        class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Role</th>
+                      <th onclick="sortTable(3)"
+                        class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Source</th>
+                      <th
+                        class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Formula</th>
+                      <th
+                        class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        ID</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-body"
+                    class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
+                    <!-- Rows will be populated by JS -->
+                    <tr class="animate-pulse">
+                      <td class="px-4 py-4" colspan="6">
+                        <div class="flex flex-col items-center justify-center py-12 text-gray-400">
+                          <span class="material-symbols-outlined text-4xl mb-2 opacity-50">table_rows</span>
+                          <p>Upload a file to see fields</p>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
 
-                <div
-                  class="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/50">
-                  <div class="overflow-x-auto h-[600px]">
-                    <table id="fields-table" class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                      <thead class="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
-                        <tr>
-                          <th onclick="sortTable(0)"
-                            class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Name ▼</th>
-                          <th onclick="sortTable(1)"
-                            class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Type</th>
-                          <th onclick="sortTable(2)"
-                            class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Role</th>
-                          <th onclick="sortTable(3)"
-                            class="sortable px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Source</th>
-                          <th
-                            class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Formula</th>
-                          <th
-                            class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            ID</th>
-                        </tr>
-                      </thead>
-                      <tbody id="table-body"
-                        class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
-                        <!-- Rows will be populated by JS -->
-                        <tr class="animate-pulse">
-                          <td class="px-4 py-4" colspan="6">
-                            <div class="flex flex-col items-center justify-center py-12 text-gray-400">
-                              <span class="material-symbols-outlined text-4xl mb-2 opacity-50">table_rows</span>
-                              <p>Upload a file to see fields</p>
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+          <!-- Dependency Graph (Bottom) -->
+          <div class="flex flex-col gap-6 glass-card rounded-2xl p-6">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+              <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary-500">hub</span>
+                Dependency Graph
+              </h3>
+              <div class="graph-controls flex gap-2">
+                <select id="layout-select" onchange="changeLayout(this.value)"
+                  class="px-3 py-1.5 text-sm font-medium border border-gray-200 rounded-lg bg-white hover:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer transition-colors">
+                  <option value="dagre">Dagre (Tree)</option>
+                  <option value="cose">Cose (Force)</option>
+                  <option value="circle">Circle</option>
+                  <option value="grid">Grid</option>
+                  <option value="breadthfirst">Breadthfirst</option>
+                </select>
+                <button onclick="resetGraph()"
+                  class="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+                  title="Reset View">
+                  <span class="material-symbols-outlined">refresh</span>
+                </button>
+                <button onclick="fitGraph()"
+                  class="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+                  title="Fit to Screen">
+                  <span class="material-symbols-outlined">fit_screen</span>
+                </button>
+              </div>
+            </div>
+
+            <div
+              class="relative flex-grow min-h-[600px] rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden">
+              <div id="cy" class="absolute inset-0"></div>
+
+              <!-- Search Overlay -->
+              <div class="absolute top-4 right-4 z-10">
+                <div class="relative shadow-lg rounded-lg">
+                  <span
+                    class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">search</span>
+                  <input type="text" id="graph-search" placeholder="Search graph..." oninput="searchGraph(this.value)"
+                    class="pl-9 pr-3 py-2 text-sm border-none rounded-lg bg-white/90 backdrop-blur focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-800/90 dark:text-white w-48 transition-all focus:w-64" />
                 </div>
               </div>
 
-              <!-- Dependency Graph (Bottom) -->
-              <div class="flex flex-col gap-6 glass-card rounded-2xl p-6">
-                <div class="flex items-center justify-between flex-wrap gap-4">
-                  <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <span class="material-symbols-outlined text-primary-500">hub</span>
-                    Dependency Graph
-                  </h3>
-                  <div class="graph-controls flex gap-2">
-                    <select id="layout-select" onchange="changeLayout(this.value)"
-                      class="px-3 py-1.5 text-sm font-medium border border-gray-200 rounded-lg bg-white hover:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer transition-colors">
-                      <option value="dagre">Dagre (Tree)</option>
-                      <option value="cose">Cose (Force)</option>
-                      <option value="circle">Circle</option>
-                      <option value="grid">Grid</option>
-                      <option value="breadthfirst">Breadthfirst</option>
-                    </select>
-                    <button onclick="resetGraph()"
-                      class="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
-                      title="Reset View">
-                      <span class="material-symbols-outlined">refresh</span>
-                    </button>
-                    <button onclick="fitGraph()"
-                      class="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
-                      title="Fit to Screen">
-                      <span class="material-symbols-outlined">fit_screen</span>
-                    </button>
+              <div id="graph-placeholder"
+                class="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm z-0">
+                <div class="text-center text-gray-400 dark:text-gray-500">
+                  <div
+                    class="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                    <span class="material-symbols-outlined text-5xl opacity-50">account_tree</span>
                   </div>
-                </div>
-
-                <div
-                  class="relative flex-grow min-h-[600px] rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden">
-                  <div id="cy" class="absolute inset-0"></div>
-
-                  <!-- Search Overlay -->
-                  <div class="absolute top-4 right-4 z-10">
-                    <div class="relative shadow-lg rounded-lg">
-                      <span
-                        class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">search</span>
-                      <input type="text" id="graph-search" placeholder="Search graph..."
-                        oninput="searchGraph(this.value)"
-                        class="pl-9 pr-3 py-2 text-sm border-none rounded-lg bg-white/90 backdrop-blur focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-800/90 dark:text-white w-48 transition-all focus:w-64" />
-                    </div>
-                  </div>
-
-                  <div id="graph-placeholder"
-                    class="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm z-0">
-                    <div class="text-center text-gray-400 dark:text-gray-500">
-                      <div
-                        class="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-                        <span class="material-symbols-outlined text-5xl opacity-50">account_tree</span>
-                      </div>
-                      <h4 class="text-lg font-bold text-gray-900 dark:text-white">Graph Visualization</h4>
-                      <p class="text-sm mt-1 max-w-xs mx-auto">Upload a workbook to visualize field dependencies and
-                        calculations.</p>
-                    </div>
-                  </div>
+                  <h4 class="text-lg font-bold text-gray-900 dark:text-white">Graph Visualization</h4>
+                  <p class="text-sm mt-1 max-w-xs mx-auto">Upload a workbook to visualize field dependencies and
+                    calculations.</p>
                 </div>
               </div>
             </div>
           </div>
-        </main>
+        </div>
+      </div>
+    </main>
 
-        <!-- Footer Container -->
-        <div id="footer-container"></div>
+    <!-- Footer Container -->
+    <div id="footer-container"></div>
 
-        <!-- Shared UI Logic -->
-        <script src="js/shared/ui.js"></script>
-        <!-- Analyzer Logic -->
-        <script src="js/analyzer.js"></script>
+    <!-- Shared UI Logic -->
+    <script src="js/shared/ui.js"></script>
+    <!-- Analyzer Logic -->
+    <script src="js/analyzer.js"></script>
 </body>
 
 </html>
