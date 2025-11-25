@@ -35,7 +35,8 @@ function renderHeader(activePageId) {
     <header class="w-full border-b border-gray-200/50 bg-white/80 backdrop-blur-md transition-all">
       <div class="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 py-3">
         <div class="flex items-center gap-3">
-          <h1 class="text-xl font-black tracking-tight text-gray-900">
+          <h1 class="text-xl font-black tracking-tight text-gray-900 flex items-center">
+            <img src="tableau_icon.svg" alt="Tableau Tools Icon" class="header-icon mr-2">
             Tableau Tools
           </h1>
         </div>

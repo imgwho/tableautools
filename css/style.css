@@ -170,3 +170,8 @@ footer {
   padding: 2rem 0;
   border-top: 1px solid rgba(229, 231, 235, 0.5);
 }
+
+.header-icon {
+  width: 3em; /* Make it responsive to font size */
+  height: 3em; /* Make it responsive to font size */
+}
